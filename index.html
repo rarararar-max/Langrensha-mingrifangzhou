@@ -384,6 +384,8 @@ const publicNameMap=()=>S.players.map(p=>playerLabel(p)).join("、");
 const STAGE_IMAGES={night:"bg_night.png",day:"bg_day.png",vote:"bg_vote.png",ceremony:"bg_card.png",card:"bg_card.png",reveal:"bg_death.png",system:"系统.png"};
 const ROLE_CARD_IMAGES={werewolf:"狼人.png",villager:"村民.png",guard:"守卫.png",witch:"女巫.png",hunter:"猎人.png",seer:"预言家.png"};
 const CHECK_CARD_IMAGES={wolf:"狼人.png",good:"村民.png"};
+const ASSET_VERSION="v1-no-inline-images";
+const ASSET_CACHE_KEY="aw_assets_ready_"+ASSET_VERSION;
 const PERSONA_STORE_KEY="aw_character_overrides_v1";
 let CHARACTER_OVERRIDES={};
 const charKey=c=>String(c?.baseName||c?.name||"");
@@ -531,6 +533,12 @@ async function prepareAssets(){
     if(left>0)await new Promise(r=>setTimeout(r,left));
   }
   finally{$("assetLoader").classList.remove("show")}
+}
+
+async function prepareAssetsOnce(){
+  if(localStorage.getItem(ASSET_CACHE_KEY)==="1")return;
+  await prepareAssetsOnce();
+  localStorage.setItem(ASSET_CACHE_KEY,"1");
 }
 
 // ===== LOG =====
