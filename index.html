@@ -310,13 +310,24 @@ const ROLE_POOL=["werewolf","werewolf","werewolf","seer","witch","hunter","guard
 const PHASE_LABELS={setup:"准备",card:"身份",night:"夜晚",guard:"守卫",wolf:"狼人",seer:"预言家",witch:"女巫",day:"白天",speech:"发言",vote:"投票",last_words:"遗言",ended:"结束"};
 const AI_TIMEOUT_MS=18000;
 const GAME_RULES=[
-  "10人局：3狼人、预言家、女巫、猎人、守卫、3村民。",
-  "狼人每夜击杀一名非狼人；预言家每夜查验一名未查验玩家；守卫每夜守护一人且不能连续两夜守同一人。",
-  "女巫有一瓶解药和一瓶毒药，各限一次；女巫知道当夜刀口；本局同夜救人与毒人互斥。",
-  "守卫守中且女巫同时救中同一目标时，双重保护失效，目标死亡。",
-  "猎人被放逐或被狼刀可开枪；被女巫毒杀不能开枪。",
-  "白天投票若最高票平票，则无人出局，直接进入下一夜。",
-  "死亡玩家有一次简短遗言。好人消灭所有狼人获胜；狼人数量不少于好人时狼人获胜。"
+  "这是一场 10 人狼人杀对局：3 名狼人 vs 7 名好人（预言家、女巫、猎人、守卫、3 位村民）。",
+  "好人需要消灭所有狼人获胜；狼人数量不少于存活好人时狼人获胜。",
+  "",
+  "🌙 夜间行动：",
+  "① 守卫选择守护一人（不能连续两夜守同一人）",
+  "② 狼人商量击杀一名非狼人",
+  "③ 预言家查验一名玩家的阵营",
+  "④ 女巫获知狼刀目标，可选择救人（解药）或毒人（毒药），各限一次",
+  "⚠ 被守护者同时被女巫救下 → 双重保护失效，目标仍会死亡",
+  "",
+  "☀️ 白天流程：",
+  "① 公布昨夜死亡结果",
+  "② 出局玩家发表遗言",
+  "③ 存活玩家依次发言讨论",
+  "④ 每人一句最后拉票",
+  "⑤ 投票放逐，最高票出局；平票则无人出局",
+  "⑥ 猎人被放逐或被狼刀时可开枪带走一人（被女巫毒杀不能开枪）",
+  "⑦ 检查胜负条件，若未结束则进入下一夜"
 ];
 const PERSONALITIES=["谨慎分析型","强势归票型","低调观察型","情绪带节奏型","逻辑推理型","装糊涂型","反问压迫型","稳健站边型"];
 const ROLE_STRATEGIES={
@@ -546,7 +557,7 @@ async function prepareAssets(){
 
 async function prepareAssetsOnce(){
   if(localStorage.getItem(ASSET_CACHE_KEY)==="1")return;
-  await prepareAssetsOnce();
+  await prepareAssets();
   localStorage.setItem(ASSET_CACHE_KEY,"1");
 }
 
@@ -694,8 +705,7 @@ function privateDialog(text,title,atmo){
 }
 
 function rulesHtml(){
-  const imgs=["可选阶段背景：bg_night.png（夜晚）、bg_day.png（白天）、bg_vote.png（投票）、bg_card.png（身份/翻牌）、bg_death.png（死亡/遗言）、bg_win_good.png（好人胜利）、bg_win_wolf.png（狼人胜利）。没有这些图时会使用角色立绘或暗色占位。"];
-  return `<div style="font-size:13px;color:#cdd5f2;line-height:1.7;background:rgba(255,255,255,.04);border-radius:14px;padding:12px">${GAME_RULES.concat(imgs).map(r=>"<p style='margin-bottom:6px'>"+esc(r)+"</p>").join("")}</div>`;
+  return `<div style="font-size:13px;color:#cdd5f2;line-height:1.7;background:rgba(255,255,255,.04);border-radius:14px;padding:12px">${GAME_RULES.map(r=>r?("<p style='margin-bottom:6px'>"+esc(r)+"</p>"):"<br>").join("")}</div>`;
 }
 
 // ===== ACTION MODAL =====
@@ -1704,6 +1714,17 @@ function loadConfig(){
   try{const c=JSON.parse(localStorage.getItem("aw_config")||"{}");if(c.apiKey)$("apiKey").value=c.apiKey;if(c.baseUrl)$("baseUrl").value=c.baseUrl;if(c.model)$("modelName").value=c.model;if(c.temperature!==undefined)try{$("tempSlider").value=c.temperature;$("tempVal").textContent=c.temperature}catch(_){}applyProviderDefaults(c.apiProvider||"deepseek",!c.baseUrl&&!c.model)}catch(_){}
 }
 
+const API_TESTED_KEY="aw_api_tested_v1";
+function saveTestedApi(){
+  try{localStorage.setItem(API_TESTED_KEY,JSON.stringify({apiKey:S.apiKey,baseUrl:S.baseUrl,model:S.model,apiProvider:S.apiProvider}))}catch(_){}
+}
+function apiConfigChanged(){
+  try{
+    const c=JSON.parse(localStorage.getItem(API_TESTED_KEY)||"{}");
+    return c.apiKey!==S.apiKey||c.baseUrl!==S.baseUrl||c.model!==S.model||c.apiProvider!==S.apiProvider;
+  }catch(_){return true}
+}
+
 $("startBtn").onclick=async()=>{
   cleanupOverlays();
   S.apiKey=$("apiKey").value.trim();S.baseUrl=$("baseUrl").value.trim().replace(/\/$/,"");
@@ -1711,7 +1732,19 @@ $("startBtn").onclick=async()=>{
   S.temperature=parseFloat($("tempSlider").value)||.75;
   if(!S.apiKey){toast("请先输入 API Key");return}
   saveConfig();
-  await prepareAssets();
+  if(apiConfigChanged()){
+    toast("正在测试 API 连接...",8000);
+    try{
+      const t=await callDeepSeek([{role:"user",content:"只回复JSON：{\"ok\":true}"}],true);
+      const a=parseJson(t,{});
+      if(!a.ok)throw new Error("返回数据异常");
+    }catch(e){
+      toast("API 连接失败："+String(e.message||e).slice(0,100)+"。请检查 API Key 和服务商配置。",7000);
+      return;
+    }
+    saveTestedApi();
+  }
+  await prepareAssetsOnce();
   $("setupScreen").classList.add("hidden");$("gameScreen").classList.remove("hidden");
   initGame();
   renderSeatBar();
@@ -1726,7 +1759,7 @@ $("testApiBtn").onclick=async()=>{
   toast("正在测试...",5000);
   try{
     const t=await callDeepSeek([{role:"user",content:"只回复JSON：{\"ok\":true}"}],true);
-    const a=parseJson(t,{});toast(a.ok?"连接成功 ✓":"连接成功但返回异常");
+    const a=parseJson(t,{});toast(a.ok?"连接成功 ✓":"连接成功但返回异常");if(a.ok)saveTestedApi();
   }catch(e){toast("连接失败："+String(e.message||e).slice(0,120),6000)}
 };
 
