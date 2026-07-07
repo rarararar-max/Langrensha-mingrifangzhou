@@ -71,13 +71,13 @@ html[data-atmo="card"]{background:#0a061a}
 
 /* ======== Stage ======== */
 #stageWrap{flex:1;position:relative;overflow:hidden}
-#stageImg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 25%;transition:opacity .5s}
+#stageImg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 25%;transition:opacity .25s;background:#080a1a}
 #stageImg.system{opacity:1;object-fit:contain;object-position:center;padding:12%}
 #stageImg.dead-focus{filter:grayscale(1) brightness(.55) contrast(1.15);opacity:.82}
 #atmoOverlay{position:absolute;inset:0;z-index:12;pointer-events:none;transition:background .6s}
 #ceremonyCard{position:absolute;inset:0;z-index:13;display:none;place-items:center;pointer-events:none}
 #ceremonyCard.show{display:grid}
-.card3d{width:min(200px,70vw);height:min(280px,98vw);perspective:800px;pointer-events:auto}
+.card3d{width:min(260px,80vw);height:min(370px,110vw);perspective:800px;pointer-events:auto}
 .card3d .inner{position:relative;width:100%;height:100%;transition:transform .8s cubic-bezier(.4,.2,.2,1);transform-style:preserve-3d}
 .card3d.flipped .inner{transform:rotateY(180deg)}
 .card3d .front,.card3d .back{position:absolute;inset:0;border-radius:16px;display:grid;place-items:center;font-size:22px;font-weight:900;backface-visibility:hidden;border:2px solid rgba(244,200,106,.3)}
@@ -90,7 +90,7 @@ html[data-atmo="card"]{background:#0a061a}
 #dialogSpeaker{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
 #dialogSpeaker .name{font-weight:700;font-size:15px}
 #dialogSpeaker .status{font-size:11px;color:#9ca6c8;background:rgba(255,255,255,.08);padding:2px 8px;border-radius:999px}
-#dialogText{font-size:14px;line-height:1.6;color:#e8edff;min-height:2.2em;margin-bottom:10px}
+#dialogText{font-size:14px;line-height:1.6;color:#e8edff;min-height:2.2em;margin-bottom:10px;white-space:pre-line}
 #dialogActions{display:flex;gap:8px;align-items:center}
 #nextBtn{flex:1;padding:10px;border-radius:14px;font-weight:700;font-size:14px;background:linear-gradient(135deg,#f7d47b,#ff9f66);color:#10121e}
 #nextBtn:disabled,.btn:disabled{opacity:.46;cursor:not-allowed;filter:grayscale(.45);box-shadow:none}
@@ -308,7 +308,7 @@ const ROLES={
 };
 const ROLE_POOL=["werewolf","werewolf","werewolf","seer","witch","hunter","guard","villager","villager","villager"];
 const PHASE_LABELS={setup:"准备",card:"身份",night:"夜晚",guard:"守卫",wolf:"狼人",seer:"预言家",witch:"女巫",day:"白天",speech:"发言",vote:"投票",last_words:"遗言",ended:"结束"};
-const AI_TIMEOUT_MS=18000;
+const AI_TIMEOUT_MS=30000;
 const GAME_RULES=[
   "这是一场 10 人狼人杀对局：3 名狼人 vs 7 名好人（预言家、女巫、猎人、守卫、3 位村民）。",
   "好人需要消灭所有狼人获胜；狼人数量不少于存活好人时狼人获胜。",
@@ -330,6 +330,66 @@ const GAME_RULES=[
   "⑦ 检查胜负条件，若未结束则进入下一夜"
 ];
 const PERSONALITIES=["谨慎分析型","强势归票型","低调观察型","情绪带节奏型","逻辑推理型","装糊涂型","反问压迫型","稳健站边型"];
+const PERSONALITY_PLANS={
+  "谨慎分析型":{wolf:"cautious",seer:"cautious",witch:"cautious",hunter:"default",guard:"cautious",villager:"cautious"},
+  "强势归票型":{wolf:"bold",seer:"bold",witch:"aggressive",hunter:"bold",guard:"default",villager:"bold"},
+  "低调观察型":{wolf:"cautious",seer:"default",witch:"default",hunter:"default",guard:"default",villager:"default"},
+  "情绪带节奏型":{wolf:"bold",seer:"bold",witch:"aggressive",hunter:"bold",guard:"default",villager:"bold"},
+  "逻辑推理型":{wolf:"complicated",seer:"complicated",witch:"complicated",hunter:"complicated",guard:"complicated",villager:"complicated"},
+  "装糊涂型":{wolf:"crazy",seer:"default",witch:"crazy",hunter:"crazy",guard:"crazy",villager:"crazy"},
+  "反问压迫型":{wolf:"aggressive",seer:"bold",witch:"default",hunter:"bold",guard:"default",villager:"aggressive"},
+  "稳健站边型":{wolf:"cautious",seer:"cautious",witch:"cautious",hunter:"default",guard:"default",villager:"cautious"}
+};
+const PLAN_TEXTS={
+  bold:{
+    werewolf:"可以跳预言家或其他身份来制造混乱，也可以选择隐藏。根据局势判断哪种更有效。",
+    seer:"有查杀就尽早跳预言家报查验带队。验到好人可以观察局势决定是否跳。",
+    witch:"主动使用解药和毒药改变局势，白天可以适度亮身份带队。",
+    hunter:"适当亮枪威慑，出局时基于证据开枪带走狼人。",
+    guard:"根据死亡信息反推刀口，大胆守护核心好人位。",
+    villager:"主动带队归票，点名怀疑对象并给出理由。"
+  },
+  cautious:{
+    werewolf:"模拟好人视角说话，踩人留余地不急于猛攻，优先保护自己不被关注。",
+    seer:"被扛推风险升高前不主动跳身份，先通过发言引导局面。",
+    witch:"白天保持中立，不主动跳女巫，用药以保险为主。",
+    hunter:"前期不暴露身份，被扛推或被刀时再亮枪。",
+    guard:"不暴露守护逻辑，避免被反推刀口。",
+    villager:"多问问题少踩人，先观察再站队。"
+  },
+  default:{
+    werewolf:"自由发挥。",
+    seer:"自由发挥。",
+    witch:"自由发挥。",
+    hunter:"自由发挥。",
+    guard:"自由发挥。",
+    villager:"自由发挥。"
+  },
+  aggressive:{
+    werewolf:"主动制造怀疑目标，敢于硬踩好人核心位。可以跳预言家带队。",
+    seer:"拿到信息尽早公开，用查杀定义局面。",
+    witch:"敢于用毒药清理高嫌疑目标。",
+    hunter:"适度亮枪威慑，出局时明确带走目标。",
+    guard:"大胆守护自己认为的好人核心。",
+    villager:"主动点名、压人、推动归票。"
+  },
+  complicated:{
+    werewolf:"仔细分析每个人的发言和票型矛盾，制造复杂的逻辑链让好人分不清真假。",
+    seer:"深度分析查验收益，选择最佳时机报查验。",
+    witch:"仔细权衡用药收益，解药救关键好人、毒药清高威胁狼。",
+    hunter:"深度分析谁在推动不正常的票型，出局时开枪带入综合分析。",
+    guard:"根据发言和死亡信息深度推断谁最需要保护。",
+    villager:"仔细研究发言与票型，找出狼人的蛛丝马迹。"
+  },
+  crazy:{
+    werewolf:"可以伪装成各种身份来搅乱局面，让好人搞不清谁是谁。",
+    seer:"伪装成平民降低被刀优先级。",
+    witch:"伪装成预言家吸引狼队火力。",
+    hunter:"伪装成村民隐藏枪口。",
+    guard:"伪装成平民降低被刀优先级。",
+    villager:"适度伪装神职视角降低被首刀风险。"
+  }
+};
 const ROLE_STRATEGIES={
   werewolf:"隐藏身份，制造合理怀疑，优先抗推神职。不要承认自己是狼人。",
   seer:"用真实查验建立可信度。选择时机跳身份。不要编造信息。",
@@ -347,11 +407,11 @@ const ROLE_PLAYBOOKS={
   villager:"目标：利用公开聊天和投票信息找到真相。重点看谁说话前后矛盾、谁跟风投票、谁突然改变说法。你没有晚上信息，不要编造查验、用药、守护、刀口。别用专业黑话。"
 };
 const PUBLIC_SPEECH_RULES={
-  werewolf:"绝对不能承认狼人、狼同伴、晚上刀了谁、夜里商量的事。说话要像普通好人一样思考。不要用黑话。",
-  seer:"没明确说自己是预言家前，不要直接报查验结果。决定公开身份时才可以说真实查验。不要用黑话。",
-  witch:"不要说‘我救了谁/毒了谁/我有药/没药’，除非公开说自己是女巫并且有这个必要。平安夜（没死人）只能从公开结果推测原因。不要用黑话。",
-  hunter:"不要无理由说自己能开枪；被逼到墙角或遗言的时候才暗示。不要用黑话。",
-  guard:"不要说‘我守了谁/昨晚保护了谁’。只能用公开聊天和投票来保护你觉得好的人。不要用黑话。",
+  werewolf:"可以伪装好人或假跳身份，但绝对不能承认狼人、狼同伴、晚上刀了谁、夜里商量的事。假跳后要保持前后一致。不要用黑话。",
+  seer:"没明确说自己是预言家前，不要直接报查验结果。决定公开身份时可以报真实查验和查验顺序，但不得编造没验过的人。不要用黑话。",
+  witch:"没公开女巫身份前，不要说救毒细节。关键轮可以公开女巫身份带队，但具体救了谁/毒了谁只有胜负关键时才说。平安夜只能从公开结果推测。不要用黑话。",
+  hunter:"不要无理由说自己能开枪；被集中怀疑、快被投或遗言时可以公开猎人身份威慑。不要太早锁死枪口。不要用黑话。",
+  guard:"通常不要公开守卫身份，更不要说具体守护对象；被推、有人冒充守卫或残局排身份时可以公开身份但不报完整守护路线。不要用黑话。",
   villager:"没有晚上信息，不要编造任何夜间行动。只能根据公开发言和投票推理。不要用黑话。"
 };
 const LEAK_PATTERNS={
@@ -394,6 +454,7 @@ const pl=(s)=>S.players.find(p=>p.seat===Number(s));
 const roleName=r=>ROLES[r]?.name||r;
 const shuffle=a=>{const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b};
 const rotateFrom=(arr,startSeat)=>{const i=arr.findIndex(p=>p.seat===startSeat);return i<0?arr:[...arr.slice(i),...arr.slice(0,i)]};
+const nextAliveSeatAfter=seat=>{const list=alive().sort((a,b)=>a.seat-b.seat);return list.find(p=>p.seat>seat)?.seat||list[0]?.seat};
 const rolePoolText=()=>Object.entries(ROLE_POOL.reduce((m,r)=>(m[r]=(m[r]||0)+1,m),{})).map(([r,n])=>roleName(r)+"x"+n).join("、");
 const clamp01=n=>Math.max(0,Math.min(1,Number(n)||0));
 const simplifyJargon=t=>String(t||"").replace(/金水/g,"看起来偏好人").replace(/银水/g,"被认为偏好人").replace(/狼坑/g,"我怀疑的人").replace(/抗推/g,"被大家怀疑").replace(/倒钩/g,"假装帮好人").replace(/垫飞/g,"故意带偏").replace(/D(\d+)/g,"第$1天").replace(/冲票/g,"一起投").replace(/站边/g,"相信");
@@ -469,7 +530,9 @@ function setInlineBusy(title,text,atmo="vote",activeSeat=null){
   $("speakerStatus").textContent="请稍等";
   $("dialogText").textContent=text||"大家正在思考，请稍等。";
   $("thinking").classList.add("show");
-  $("nextBtn").classList.remove("hidden");
+  const next=$("nextBtn");
+  next.onclick=null;
+  next.classList.remove("hidden");
   setNextState("等待中…",true);
   setSkipAiVisible(false);
 }
@@ -481,7 +544,7 @@ function clearInlineBusy(){
 
 function bulletLines(items){return items.filter(Boolean).map(x=>"· "+x).join("\n")}
 function formatWolfSuggestions(suggestions){
-  return "狼队讨论意见：\n"+suggestions.map(s=>"· "+seatLabel(s.from)+" 建议击杀 "+seatLabel(s.target)+(s.reason?"\n  理由："+s.reason:"")).join("\n");
+  return "狼队讨论意见：\n"+suggestions.map(s=>"· "+seatLabel(s.from)+" 建议击杀 "+seatLabel(s.target)+(s.reason?"\n  理由："+s.reason:"")).join("\n\n\n");
 }
 function voteCounts(votes){const counts={};votes.forEach(v=>counts[v.to]=(counts[v.to]||0)+1);return counts}
 function formatVoteBlock(votes,out,tied,max){
@@ -586,14 +649,21 @@ function enqueue(scene){S.sceneQueue.push(scene)}
 function clearQueue(){S.sceneQueue.length=0}
 
 async function playQueue(){
-  if(S.scenePlaying)return;
+  if(S.scenePlaying)return S.scenePlayingPromise;
   S.scenePlaying=true;
-  const q=S.sceneQueue;
-  while(q.length>0&&!S.winner){
-    const scene=q.shift();
-    await renderScene(scene);
-  }
-  S.scenePlaying=false;
+  S.scenePlayingPromise=(async()=>{
+    try{
+      while(S.sceneQueue.length>0&&!S.winner){
+        const scene=S.sceneQueue.shift();
+        await renderScene(scene);
+      }
+    }finally{
+      S.scenePlaying=false;
+      S.scenePlayingPromise=null;
+      if(S.sceneQueue.length&&!S.winner)await playQueue();
+    }
+  })();
+  return S.scenePlayingPromise;
 }
 
 function renderScene(scene){
@@ -631,16 +701,22 @@ function renderScene(scene){
       card3d.classList.remove("flipped");
       setNextState("翻开身份 ▸",false);
       S.sceneResolve=resolve;
-      btn.onclick=()=>{
+      let flipped=false;
+      const flip=()=>{
+        if(flipped)return;
+        flipped=true;
         card3d.classList.add("flipped");
         if(scene.roleCardImage){$("cardBackImg").src=scene.roleCardImage;$("cardBackImg").style.display="block";$("cardBackText").style.display="none";}
         else{$("cardBackImg").style.display="none";$("cardBackText").style.display="block";$("cardBackText").textContent=scene.revealText||"";}
         setNextState("翻牌中…",true);
         setTimeout(()=>{
           setNextState("确认身份 ▸",false);
-          btn.onclick=()=>{S.sceneResolve=null;resolve()};
+          btn.onclick=()=>{card3d.onclick=null;S.sceneResolve=null;resolve()};
+          card3d.onclick=()=>btn.click();
         },900);
       };
+      btn.onclick=flip;
+      card3d.onclick=()=>btn.click();
       return;
     }else if(scene.type==="reveal"){
       card.classList.add("show");
@@ -721,8 +797,20 @@ function showAction(title,desc,bodyHTML){
 
 function hideAction(){S._actionResolve=null;$("actionModal").classList.remove("show")}
 
+function humanLeakWarning(text){
+  const t=String(text||"");
+  const patterns=[/狼同伴|狼队友|队友是|我们狼|昨晚.*刀|刀了|刀口是|我.*守了|守护了|昨晚.*守|我.*救了|我.*毒了|解药|毒药|我昨晚验|我验了|我查验了|查验结果/];
+  if(!patterns.some(re=>re.test(t)))return true;
+  return confirm("这段话可能公开暴露夜间私密信息或狼队信息。确定要这样发送吗？");
+}
+
+function personaRuleWarning(text){
+  const t=String(text||"");
+  return /(狼人|预言家|女巫|猎人|守卫|村民|身份|阵营|查验|毒药|解药|守护|狼队|队友|刀口|胜利条件|规则)/.test(t);
+}
+
 async function selectTarget(title,desc,candidates,allowSkip=false){
-  const html=`<div class="target-grid">${candidates.map(p=>`<button data-s="${p.seat}">${p.seat}号</button>`).join("")}</div>${allowSkip?'<button id="modalSkipBtn" style="width:100%;margin-top:8px;padding:10px;border-radius:14px;background:rgba(255,255,255,.05);color:#9ca6c8;border:1px solid rgba(255,255,255,.08)">跳过</button>':''}<div class="action-hint">先选择目标，再确认。不可用时按钮会保持灰色。</div>`;
+  const html=`<div class="target-grid">${candidates.map(p=>`<button data-s="${p.seat}"><span style="font-size:16px">${p.seat}号</span><br><span style="font-size:11px;color:#9ca6c8">${esc(p.name)}</span></button>`).join("")}</div>${allowSkip?'<button id="modalSkipBtn" style="width:100%;margin-top:8px;padding:10px;border-radius:14px;background:rgba(255,255,255,.05);color:#9ca6c8;border:1px solid rgba(255,255,255,.08)">跳过</button>':''}<div class="action-hint">先选择目标，再确认。不可用时按钮会保持灰色。</div>`;
   return new Promise(resolve=>{
     showAction(title,desc,html).then(()=>{});
     const grid=$("actionBody").querySelector(".target-grid");
@@ -761,6 +849,7 @@ async function inputSpeech(){
     btn.className="btn";btn.textContent="发送发言";
     btn.onclick=()=>{
       const t=$("speechInput")?.value?.trim()||"我先观察一下，暂时不明确站边。";
+      if(!humanLeakWarning(t))return;
       hideAction();resolve(t.slice(0,220));
     };
     $("actionBody").appendChild(btn);
@@ -776,15 +865,20 @@ async function inputLastWords(p){
       btn.className="btn";btn.textContent="发表遗言";
       btn.onclick=()=>{
         const t=$("lastWordsInput")?.value?.trim()||"我没什么更多信息，大家看票型和发言继续盘。";
+        if(!humanLeakWarning(t))return;
         hideAction();resolve(t.slice(0,180));
       };
       $("actionBody").appendChild(btn);
     });
   }
   const fb={speech:fallbackLastWords(p)};
-  dialog("正在整理"+playerLabel(p)+"的遗言...","系统","生成中","vote","system",p.seat,true);
-  await playQueue();
-  const ans=await aiJson(p,"你已出局，请发表一句遗言。不要泄露夜间私密行动、队友、刀口、守护、用药等不该公开的信息。只能基于公开事件、自己的公开立场和票型交代。输出{\"speech\":\"遗言\"}",fb);
+  setInlineBusy("系统","正在整理"+playerLabel(p)+"的遗言，请稍等。","vote",p.seat);
+  let ans=fb;
+  try{
+    ans=await aiJson(p,"你已出局，请发表一句遗言。不要泄露夜间私密行动、队友、刀口、守护、用药等不该公开的信息。只能基于公开事件、自己的公开立场和票型交代。输出{\"speech\":\"遗言\"}",fb);
+  }finally{
+    clearInlineBusy();
+  }
   let speech=String(ans.speech||fb.speech).slice(0,180);
   if(isUnsafeSpeech(p,speech)||referencesUnspokenToday(speech))speech=fb.speech;
   return speech;
@@ -800,22 +894,23 @@ function fallbackLastWords(p){
 }
 
 async function witchAction(w,killed){
-  const candidates=alive().filter(p=>p.seat!==w.seat&&p.seat!==killed);
+  const candidates=alive().filter(p=>p.seat!==w.seat);
   let save=false,poison=null;
+  let poisonMode=false;
   const html=()=>`<p style="font-size:13px;color:#9ca6c8;margin-bottom:10px">${killed?"今晚被杀："+seatLabel(killed):"无明确刀口"} · 解药${w.witch.antidote?"可用":"已用"} · 毒药${w.witch.poison?"可用":"已用"}</p>
   <div class="witch-actions"><button id="wsave" class="${save?'active':''}" ${!w.witch.antidote||!killed?'disabled':''}>💊 ${save?'已救':'使用解药'}</button>
   <button id="wskip" class="${!save&&!poison?'active':''}">跳过</button>
-  <button id="wpoison" class="danger ${poison?'active':''}" ${!w.witch.poison?'disabled':''}>☠️ ${poison?'已选':'使用毒药'}</button></div>
+  <button id="wpoison" class="danger ${poisonMode||poison?'active':''}" ${!w.witch.poison?'disabled':''}>☠️ ${poison?'已选':'使用毒药'}</button></div>
   <div class="target-grid">${candidates.map(p=>`<button class="poison-target ${poison===p.seat?'selected':''}" data-s="${p.seat}" ${!w.witch.poison?'disabled':''}>毒 ${p.seat}号</button>`).join("")}</div>`;
   return new Promise(resolve=>{
     showAction("女巫行动","选择今晚的行动。",html()).then(()=>{});
     const render=()=>{$("actionBody").innerHTML=html();bindWitch()};
     const bindWitch=()=>{
-      $("wsave")?.addEventListener("click",()=>{save=!save;if(save)poison=null;render()});
-      $("wskip")?.addEventListener("click",()=>{save=false;poison=null;render()});
-      $("wpoison")?.addEventListener("click",()=>{poison=poison?null:(candidates[0]?.seat||null);if(poison)save=false;render()});
+      $("wsave")?.addEventListener("click",()=>{save=!save;if(save){poison=null;poisonMode=false}render()});
+      $("wskip")?.addEventListener("click",()=>{save=false;poison=null;poisonMode=false;render()});
+      $("wpoison")?.addEventListener("click",()=>{poisonMode=!poisonMode;if(poisonMode)save=false;else poison=null;render()});
       $("actionBody").querySelectorAll(".poison-target").forEach(b=>b.onclick=()=>{
-        poison=Number(b.dataset.s);save=false;render();
+        poison=Number(b.dataset.s);poisonMode=true;save=false;render();
         const match=$("actionBody").querySelector(`.poison-target[data-s="${b.dataset.s}"]`);
         if(match)match.classList.add("selected");
       });
@@ -823,10 +918,13 @@ async function witchAction(w,killed){
       let confirmBtn=$("actionBody").querySelector(".btn");
       if(!confirmBtn){
         confirmBtn=document.createElement("button");
-        confirmBtn.className="btn";confirmBtn.textContent="确认行动";
+        confirmBtn.className="btn";
         $("actionBody").appendChild(confirmBtn);
       }
+      confirmBtn.textContent=save?"确认救人":poison?"确认毒"+seatLabel(poison):(poisonMode?"请选择毒药目标":"确认跳过");
+      confirmBtn.disabled=poisonMode&&!poison;
       confirmBtn.onclick=()=>{
+        if(poisonMode&&!poison){toast("请选择毒药目标");return;}
         hideAction();resolve({save,poison});
       };
     };
@@ -844,11 +942,14 @@ function initGame(){
       seat,role,alive:true,isHuman:!!cfg.human,
       name:cfg.name,baseName:cfg.baseName,portrait:cfg.img,customImg:cfg.customImg||null,persona:cfg.persona,
       personality:PERSONALITIES[i%PERSONALITIES.length],
+      plan:(PERSONALITY_PLANS[PERSONALITIES[i%PERSONALITIES.length]]||{})[role]||"default",
+      planText:"",
       memory:[],privateInfo:[],voteLean:null,
-      suspicion:{},trust:{},roleGuesses:{},claimsSeen:[],lastProtected:null,
+      suspicion:{},trust:{},roleGuesses:{},claimsSeen:[],publicClaim:null,claimHistory:[],lastProtected:null,
       witch:{antidote:role==="witch",poison:role==="witch"},
-      checked:[],badge:[],shotUsed:false,voteReason:""
+      checked:[],badge:[],shotUsed:false,voteReason:"",privateVoteReason:""
     };
+    p.planText=PLAN_TEXTS[p.plan]?.[p.role]||"";
     for(let s=1;s<=10;s++)if(s!==seat){p.suspicion[s]=.35+Math.random()*.15;p.trust[s]=.45+Math.random()*.1;p.roleGuesses[s]="unknown";}
     return p;
   });
@@ -880,7 +981,9 @@ async function callDeepSeek(messages,jsonMode){
     body:JSON.stringify(body),signal:controller.signal
     });
   }catch(e){
-    if(e?.name==="AbortError")throw new Error("AI响应超时，请稍后重试或切换省钱模式");
+    if(e?.name==="AbortError")throw new Error("AI响应超时，请稍后重试");
+    const msg=String(e?.message||"");
+    if(msg.includes("Load failed")||msg.includes("Failed to fetch"))throw new Error("API 请求被拦截（跨域/网络），可尝试使用后端转发或更换 API 端点");
     throw e;
   }finally{clearTimeout(timer)}
   if(!res.ok){const t=await res.text().catch(()=>"");throw new Error("API "+res.status+"："+t.slice(0,160))}
@@ -902,9 +1005,10 @@ function buildMsgs(p,task){
   if(p.role==="guard")priv.push("上夜守："+(p.lastProtected?seatLabel(p.lastProtected):"无"));
   const susp=Object.entries(p.suspicion).filter(([s])=>pl(s)?.alive).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([s,v])=>seatLabel(s)+"可疑程度"+pressureLabel(v)).join("，");
   const trust=Object.entries(p.trust||{}).filter(([s])=>pl(s)?.alive).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([s,v])=>seatLabel(s)+"可信"+Math.round(v*100)+"%").join("，");
-  const claims=S.claims.slice(-10).map(c=>"D"+c.day+" "+seatLabel(c.from)+"声称"+c.type+(c.target?"→"+seatLabel(c.target):"")+(c.result?"="+c.result:"")+"："+c.text).join("\n")||"暂无";
+  const claims=claimsSummary();
   const voteSummary=S.history.votes.slice(-3).map(v=>"D"+v.day+" "+v.votes.map(x=>seatLabel(x.from)+"投"+seatLabel(x.to)+(x.reason?"("+x.reason+")":"")).join("；")+(v.out?"；出局"+seatLabel(v.out):"；平票无人出局")).join("\n")||"暂无";
   const roleGuesses=Object.entries(p.roleGuesses||{}).filter(([s])=>pl(s)?.alive).slice(0,8).map(([s,r])=>seatLabel(s)+":"+r).join("，")||"暂无";
+  const ownClaim=p.publicClaim?"你当前公开声称的身份："+claimRoleLabel(p.publicClaim.role)+"，方式："+p.publicClaim.intent+"，从第"+p.publicClaim.day+"天开始。后续发言要尽量保持前后一致。":"你目前没有公开固定身份。";
   const sc=S.speechContext||{};
   const spoken=(sc.spoken||[]).map(seatLabel).join("、")||"暂无";
   const remaining=(sc.remaining||[]).map(seatLabel).join("、")||"暂无";
@@ -913,11 +1017,12 @@ function buildMsgs(p,task){
   const stageContext=isFirstRound?"【第一天，还没人发过言，任何人都没有依据怀疑别人。怀疑值目前是随机的初始值，不能当真。预言家第一夜只能盲查，没有线索可循。不要假装知道谁是疑似狼人。】":"";
   const suspLabel=isFirstRound?"（无依据的初始感觉）":"";
   const persona=p.persona||"保持自然、清晰、有辨识度的中文表达。";
-  const sys="你在玩中文狼人杀。你必须只基于当前座位可见信息决策，禁止上帝视角，禁止提及本局不存在的角色，禁止因为明日方舟人设获得任何狼人杀信息。你是"+playerLabel(p)+"，狼人杀身份是"+roleName(p.role)+"，阵营目标按身份执行。明日方舟语气人设："+persona+" 这只影响语气、措辞和称呼，不能改变狼人杀规则。性格"+p.personality+"。身份策略："+ROLE_STRATEGIES[p.role]+"。详细打法："+ROLE_PLAYBOOKS[p.role]+"。公开发言安全规则："+PUBLIC_SPEECH_RULES[p.role]+" 私有信息只能用于自己判断，绝不能原样复述；要把夜间信息转译成公开可解释的票型、发言矛盾、场上风向。发言要像真正玩家：引用具体座位、公开发言矛盾、票型、声明和白天公布结果；避免空泛的‘先观察’。禁止使用任何狼人杀专业黑话，包括不限于：金水、银水、狼坑、抗推、倒钩、垫飞、D1/D2、冲票、站边；全部用日常中文说。输出JSON，不要输出JSON外文本。公开发言不得暴露私密信息，自己的草稿只放note字段。";
+   const planPart=p.planText?"本局计划："+p.planText+" ":"";
+   const sys="你在玩中文狼人杀。你必须只基于当前座位可见信息决策，禁止上帝视角，禁止提及本局不存在的角色，禁止因为明日方舟人设获得任何狼人杀信息。你是"+playerLabel(p)+"，狼人杀身份是"+roleName(p.role)+"，阵营目标按身份执行。明日方舟语气人设："+persona+" 这只影响语气、措辞和称呼，不能改变狼人杀规则。性格"+p.personality+"。"+planPart+"身份策略："+ROLE_STRATEGIES[p.role]+"。详细打法："+ROLE_PLAYBOOKS[p.role]+"。公开发言安全规则："+PUBLIC_SPEECH_RULES[p.role]+" 私有信息只能用于自己判断，绝不能原样复述；要把夜间信息转译成公开可解释的票型、发言矛盾、场上风向。允许在合适时机跳身份、对跳、假跳、软跳或继续隐藏；但必须符合你的阵营目标，并且后续发言保持一致。发言要像真正玩家：引用具体座位、公开发言矛盾、票型、声明和白天公布结果；避免空泛的‘先观察’。禁止使用任何狼人杀专业黑话，包括不限于：金水、银水、狼坑、抗推、倒钩、垫飞、D1/D2、冲票、站边；全部用日常中文说。输出JSON，不要输出JSON外文本。公开发言不得暴露私密信息，自己的草稿只放note字段。\n\n参考示例：\n真预言家跳身份：{\"note\":\"我查到7号是狼人，必须公开身份带队。\",\"claimIntent\":\"true_claim\",\"claimRole\":\"seer\",\"claimContent\":\"公开预言家并报真实查验\",\"speech\":\"我公开身份，我是预言家。昨晚验了7号，他是狼人。今天先出7号，如果7号出局后局势不对，你们明天再回头看我。\",\"voteLean\":7,\"voteReason\":\"我的查验结果是狼人\"}\n\n狼人对跳：{\"note\":\"真预言家3号查杀我队友7号，我选择对跳，给7号好人结果，制造真假预言家局面。\",\"claimIntent\":\"counter_claim\",\"claimRole\":\"seer\",\"claimContent\":\"假跳预言家保护7号\",\"speech\":\"我也跳预言家。昨晚我验的是7号，他不是狼人。3号这时候跳出来踩7号，我不信。今天不能直接跟3号走，先听7号解释。\",\"voteLean\":3,\"voteReason\":\"3号预言家身份可疑\"}\n\n女巫带队：{\"note\":\"场上没人归票，我公开女巫身份稳定局面，但不说具体用药。\",\"claimIntent\":\"true_claim\",\"claimRole\":\"witch\",\"claimContent\":\"公开女巫但不报药\",\"speech\":\"我可以把身份抬出来，我是女巫。具体夜里怎么处理我现在不摊开，但今天我不想让票散掉。5号这轮解释最虚，先集中听5号。\",\"voteLean\":5,\"voteReason\":\"5号解释最虚\"}\n\n猎人自保：{\"note\":\"我快被推了，公开猎人身份自保。\",\"claimIntent\":\"true_claim\",\"claimRole\":\"hunter\",\"claimContent\":\"公开猎人威慑\",\"speech\":\"我先说明，我不是普通村民。你们如果今天硬出我，场上会少一个能反制狼人的位置。现在我更怀疑5号一直在顺势推票，他得解释清楚。\",\"voteLean\":5,\"voteReason\":\"5号顺势推票\"}\n\n普通好人发言：{\"note\":\"5号连续跟风投票没有自己理由，但信息还少不想太早定死。\",\"claimIntent\":\"hide\",\"claimRole\":\"null\",\"claimContent\":\"\",\"speech\":\"我先压一下5号。你前两轮都只说跟票，没有给出自己的怀疑链。这轮希望你解释清楚你真正怀疑谁、理由是什么。\",\"voteLean\":5,\"voteReason\":\"5号跟风没有独立判断\"}";
   const rules=GAME_RULES.join(" ");
   const roleInfo="本局角色池："+rolePoolText()+"。规则："+rules;
   const pubStructured=S.logs.filter(l=>l.visible==="public"||l.visible==="speech").slice(-12).map(l=>"("+l.time+")["+l.title+"]"+l.text).join("\n").slice(0,3000);
-  const usr="阶段："+(PHASE_LABELS[S.phase]||S.phase)+"，第"+S.day+"天。存活："+a+"。\n玩家表："+publicNameMap()+"\n"+speechOrder+"\n"+stageContext+"\n"+roleInfo+"\n公开事件（带时间线）：\n"+(pubStructured||"暂无")+"\n公开身份/查验/声明摘要：\n"+claims+"\n近三天票型：\n"+voteSummary+"\n你的私有信息（只能自己判断，公开发言严禁原样复述）：\n"+(priv.join("\n")||"无")+"\n你的当前判断"+suspLabel+"："+(susp||"暂无")+"\n你较信任的人："+(trust||"暂无")+"\n你对身份的猜测："+roleGuesses+"\n任务："+task;
+  const usr="阶段："+(PHASE_LABELS[S.phase]||S.phase)+"，第"+S.day+"天。存活："+a+"。\n玩家表："+publicNameMap()+"\n"+speechOrder+"\n"+stageContext+"\n"+roleInfo+"\n公开事件（带时间线）：\n"+(pubStructured||"暂无")+"\n公开身份/查验/声明摘要：\n"+claims+"\n"+ownClaim+"\n近三天票型：\n"+voteSummary+"\n你的私有信息（只能自己判断，公开发言严禁原样复述）：\n"+(priv.join("\n")||"无")+"\n你的当前判断"+suspLabel+"："+(susp||"暂无")+"\n你较信任的人："+(trust||"暂无")+"\n你对身份的猜测："+roleGuesses+"\n任务："+task;
   return[{role:"system",content:sys},{role:"user",content:usr}];
 }
 
@@ -948,6 +1053,27 @@ function aiPick(p,candidates,preferSuspicion=true){
   return s[0].seat;
 }
 
+function claimRoleLabel(role){
+  const map={seer:"预言家",witch:"女巫",hunter:"猎人",guard:"守卫",villager:"村民",werewolf:"狼人",wolf:"狼人",unknown:"未知"};
+  return map[String(role||"").toLowerCase()]||String(role||"未知");
+}
+
+function claimsSummary(){
+  const recent=S.claims.slice(-14);
+  if(!recent.length)return "暂无公开身份声明。";
+  return recent.map(c=>{
+    const who=seatLabel(c.from);
+    if(c.type==="role_claim")return "第"+c.day+"天 "+who+"声称自己是"+claimRoleLabel(c.result)+"。";
+    if(c.type==="seer_check")return "第"+c.day+"天 "+who+"声称查验"+seatLabel(c.target)+"是"+c.result+"。";
+    if(c.type==="claim_intent")return "第"+c.day+"天 "+who+"以"+claimRoleLabel(c.result)+"身份发言。";
+    return "第"+c.day+"天 "+who+"声明"+String(c.type||"信息")+(c.target?"，目标"+seatLabel(c.target):"")+(c.result?"，结果"+claimRoleLabel(c.result):"")+"。";
+  }).join("\n");
+}
+
+function nightInfoBoundary(){
+  return S.day<=1?"【首夜信息边界】本局还没有白天发言和投票，禁止引用带队、站边、票型、发言矛盾、活跃度等未发生信息；只能基于座位、角色目标、可选目标和风险做选择。":"【夜间信息边界】只能引用你可见且已经发生的公开信息或你的私有信息，不要编造未发生的发言、票型或行动。";
+}
+
 // ===== NIGHT PHASE =====
 async function startNight(){
   if(S.winner)return;
@@ -976,8 +1102,6 @@ async function wolfIntroPhase(){
   if(humanWolf){
     const wlist=wolves.filter(w=>w.seat!==humanWolf.seat).map(playerLabel).join("、")||"无";
     privateDialog("狼人请睁眼。你的狼同伴是："+wlist+"。本阶段只确认同伴，随后进入夜间行动。","狼队确认","night");
-  }else{
-    dialog("狼人请睁眼，确认同伴。","系统","","night","system");
   }
   await playQueue();
 }
@@ -992,17 +1116,16 @@ async function guardPhase(){
     S.night.guardTarget=seat;g.lastProtected=seat;
     privateDialog("你守护了"+seatLabel(seat)+"。","守卫行动","night");
   }else{
-    dialog("守卫行动中……","系统","","night","system");
-    await playQueue();
-    showThinking(true);
+    setInlineBusy("系统","守卫正在行动...","night");
     const candidates=alive().filter(p=>p.seat!==g.lastProtected);
     let seat=aiPick(g,candidates,false);
     if(S.aiMode!=="save"){
-      const ans=await retryAI(g,"你是守卫，请根据公开发言、声明、票型和你的信念选择今晚守护目标。不能连续守同一人。输出{\"target\":座位号,\"reason\":\"理由\"}",{target:seat,reason:""},1);
+      const ans=await retryAI(g,nightInfoBoundary()+"你是守卫，请根据当前可见信息选择今晚守护目标。不能连续守同一人。输出{\"target\":座位号,\"reason\":\"理由\"}",{target:seat,reason:""},1);
       if(candidates.some(p=>p.seat===Number(ans.target)))seat=Number(ans.target);
     }
     S.night.guardTarget=seat;g.lastProtected=seat;
-    showThinking(false);
+    g.privateInfo.push("第"+S.day+"夜守护"+seatLabel(seat)+"。");
+    clearInlineBusy();
   }
 }
 
@@ -1017,7 +1140,7 @@ async function wolfPhase(){
   let suggestions=[];
   for(const aw of aiWolves){
     if(S.aiMode!=="save"){
-      const ans=await retryAI(aw,"你是狼人，请简单建议今晚刀谁，一句话。输出{\"target\":座位号,\"reason\":\"一句话理由\"}",{target:aiPick(aw,candidates,false),reason:""},1);
+      const ans=await retryAI(aw,nightInfoBoundary()+"你是狼人，请简单建议今晚刀谁，一句话。不要刀狼同伴。输出{\"target\":座位号,\"reason\":\"一句话理由\"}",{target:aiPick(aw,candidates,false),reason:""},1);
       if(candidates.some(p=>p.seat===Number(ans.target)))suggestions.push({from:aw.seat,target:Number(ans.target),reason:String(ans.reason||"").slice(0,40)});
     }
   }
@@ -1032,10 +1155,7 @@ async function wolfPhase(){
     S.night.wolfTarget=seat;
     privateDialog("狼队选择击杀"+seatLabel(seat)+"。","狼人行动","night");
   }else{
-    dialog("狼人行动中……","系统","","night","system");
-    await playQueue();
-    showThinking(true);
-    // AI picks: use most suggested target, or fallback
+    setInlineBusy("系统","狼人正在行动...","night");
     let seat=null;
     if(suggestions.length){
       const counts={};suggestions.forEach(s=>{counts[s.target]=(counts[s.target]||0)+1});
@@ -1044,12 +1164,12 @@ async function wolfPhase(){
     }
     if(!seat)seat=aiPick(wolves[0],candidates,false);
     if(S.aiMode!=="save"&&!suggestions.length){
-      const ans=await retryAI(wolves[0],"你代表狼队选择今晚刀口。优先考虑疑似神职、强势带队好人、或能制造白天推人空间的目标；不要刀狼同伴。输出{\"target\":座位号,\"reason\":\"理由\"}",{target:seat,reason:""},1);
+      const ans=await retryAI(wolves[0],nightInfoBoundary()+"你代表狼队选择今晚刀口。优先考虑疑似神职、强势带队好人、或能制造白天推人空间的目标；首夜不能引用尚未发生的发言表现。不要刀狼同伴。输出{\"target\":座位号,\"reason\":\"理由\"}",{target:seat,reason:""},1);
       if(candidates.some(p=>p.seat===Number(ans.target)))seat=Number(ans.target);
     }
     S.night.wolfTarget=seat;
     wolves.forEach(w=>w.privateInfo.push("第"+S.day+"夜刀口："+seatLabel(seat)+"。"));
-    showThinking(false);
+    clearInlineBusy();
   }
 }
 
@@ -1067,16 +1187,14 @@ async function seerPhase(){
     const target=pl(seat);const result=target.role==="werewolf"?"狼人":"好人";
     enqueue({type:"reveal",title:"查验结果",text:seatLabel(seat)+" 的阵营是「"+result+"」。",status:"仅你可见",atmo:"reveal",visible:"private",log:true,roleCardImage:target.role==="werewolf"?CHECK_CARD_IMAGES.wolf:CHECK_CARD_IMAGES.good,revealText:result});
   }else{
-    dialog("预言家行动中……","系统","","night","system");
-    await playQueue();
-    showThinking(true);
+    setInlineBusy("系统","预言家正在行动...","night");
     let seat=aiPick(s,candidates,true);
     if(S.aiMode!=="save"){
-      const ans=await retryAI(s,"你是预言家，请选择今晚查验目标。优先查强势带队、对跳、票型异常或能定义局势的人，不要重复查验。输出{\"target\":座位号,\"reason\":\"理由\"}",{target:seat,reason:""},1);
+      const ans=await retryAI(s,nightInfoBoundary()+"你是预言家，请选择今晚查验目标。后续夜晚可优先查强势带队、对跳、票型异常或能定义局势的人；首夜只能盲查或按座位风险选择。不要重复查验。输出{\"target\":座位号,\"reason\":\"理由\"}",{target:seat,reason:""},1);
       if(candidates.some(p=>p.seat===Number(ans.target)))seat=Number(ans.target);
     }
     applySeerCheck(s,seat);S.night.seerTarget=seat;
-    showThinking(false);
+    clearInlineBusy();
   }
 }
 
@@ -1099,19 +1217,18 @@ async function witchPhase(){
     if(save&&w.witch.antidote){S.night.witchSave=true;w.witch.antidote=false;privateDialog("你使用解药救了"+seatLabel(killed)+"。","女巫行动")}
     if(poison&&w.witch.poison){S.night.witchPoisonTarget=poison;w.witch.poison=false;privateDialog("你使用毒药毒了"+seatLabel(poison)+"。","女巫行动")}
   }else{
-    dialog("女巫行动中……","系统","","night","system");
-    await playQueue();
-    showThinking(true);
+    setInlineBusy("系统","女巫正在行动...","night");
     let decision={action:"none",target:null,reason:""};
-    const poisonCandidates=alive().filter(p=>p.seat!==w.seat&&p.seat!==killed);
-    if(S.aiMode!=="save")decision=await retryAI(w,"你是女巫。今晚刀口是"+(killed?seatLabel(killed):"无")+"。解药"+(w.witch.antidote?"可用":"已用")+"，毒药"+(w.witch.poison?"可用":"已用")+"。请选择 save/poison/none，救人与毒人互斥。输出{\"action\":\"save/poison/none\",\"target\":座位号|null,\"reason\":\"理由\"}",decision,1);
+    const poisonCandidates=alive().filter(p=>p.seat!==w.seat);
+    if(S.aiMode!=="save")decision=await retryAI(w,nightInfoBoundary()+"你是女巫。今晚刀口是"+(killed?seatLabel(killed):"无")+"。解药"+(w.witch.antidote?"可用":"已用")+"，毒药"+(w.witch.poison?"可用":"已用")+"。请选择 save/poison/none，救人与毒人互斥。输出{\"action\":\"save/poison/none\",\"target\":座位号|null,\"reason\":\"理由\"}",decision,1);
     const action=String(decision.action||"").toLowerCase();
     const wantsSave=action==="save"||action.includes("救");
-    const wantsPoison=action==="poison"||action.includes("毒");
-    if(w.witch.antidote&&killed&&(wantsSave||(!action&&S.day<=1))){S.night.witchSave=true;w.witch.antidote=false;w.privateInfo.push("第"+S.day+"夜救了"+seatLabel(killed)+"。");}
-    if(w.witch.poison&&wantsPoison&&poisonCandidates.some(p=>p.seat===Number(decision.target))){S.night.witchPoisonTarget=Number(decision.target);w.witch.poison=false;w.privateInfo.push("第"+S.day+"夜毒了"+seatLabel(decision.target)+"。");}
-    else if(w.witch.poison&&S.aiMode==="save"&&S.day>=2){const target=aiPick(w,poisonCandidates,true);if(target&&(w.suspicion[target]||0)>.68){S.night.witchPoisonTarget=target;w.witch.poison=false;w.privateInfo.push("第"+S.day+"夜毒了"+seatLabel(target)+"。");}}
-    showThinking(false);
+    const wantsPoison=!wantsSave&&(action==="poison"||action.includes("毒"));
+    let witchResult="";
+    if(w.witch.antidote&&killed&&(wantsSave||(!action&&S.day<=1))){S.night.witchSave=true;w.witch.antidote=false;w.privateInfo.push("第"+S.day+"夜救了"+seatLabel(killed)+"。");witchResult="使用解药救了"+seatLabel(killed);}
+    if(w.witch.poison&&wantsPoison&&poisonCandidates.some(p=>p.seat===Number(decision.target))){S.night.witchPoisonTarget=Number(decision.target);w.witch.poison=false;w.privateInfo.push("第"+S.day+"夜毒了"+seatLabel(decision.target)+"。");witchResult="使用毒药毒了"+seatLabel(decision.target);}
+    else if(w.witch.poison&&S.aiMode==="save"&&S.day>=2){const target=aiPick(w,poisonCandidates,true);if(target&&(w.suspicion[target]||0)>.68){S.night.witchPoisonTarget=target;w.witch.poison=false;w.privateInfo.push("第"+S.day+"夜毒了"+seatLabel(target)+"。");witchResult="使用毒药毒了"+seatLabel(target);}}
+    clearInlineBusy();
   }
 }
 
@@ -1152,10 +1269,12 @@ async function speechesPhase(){
   await playQueue();
   const img=$("stageImg");const spk=$("speakerName");const stt=$("speakerStatus");
   const txt=$("dialogText");const btn=$("nextBtn");const thk=$("thinking");
-  const order=alive().sort((a,b)=>a.seat-b.seat);
-  const startSeat=order[0]?.seat;
+  const baseOrder=alive().sort((a,b)=>a.seat-b.seat);
+  const nightDeaths=S.night?.deaths||[];
+  let startSeat=S.day===1?baseOrder[Math.floor(Math.random()*baseOrder.length)]?.seat:nextAliveSeatAfter(nightDeaths[0]||0);
+  const order=rotateFrom(baseOrder,startSeat);
   S.speechContext={day:S.day,spoken:[],remaining:order.map(p=>p.seat),current:null,index:0,total:order.length};
-  addLog("system","发言顺序","第"+S.day+"天从最小存活编号开始："+order.map(playerLabel).join("、"),"public");
+  addLog("system","发言顺序","第"+S.day+"天从"+seatLabel(startSeat)+"开始："+order.map(playerLabel).join("、"),"public");
   for(const p of order){
     if(S.winner)return;
     S.speechContext.current=p.seat;
@@ -1183,6 +1302,7 @@ async function speechesPhase(){
       if(p){img.className="";img.src=portraitSrc(p)}
       else{img.className="system";img.src="系统.png"}
       renderSeatBar(p.seat);
+      btn.onclick=null;
       btn.disabled=true;
       thk.classList.add("show");
       setNextState("思考中…",true);
@@ -1202,7 +1322,7 @@ async function speechesPhase(){
       }
       if(isUnsafeSpeech(p,speech)||referencesUnspokenToday(speech))speech=safeSpeechFallback(p);
       const note=String(ans.note||"").slice(0,300);
-      const voteReason=String(ans.voteReason||"调查中").slice(0,120);
+      const voteReason=sanitizePublicReason(p,Number(ans.voteLean)||fb.voteLean,String(ans.voteReason||"调查中"));
       p.voteLean=Number(ans.voteLean)||fb.voteLean;
       p.voteReason=voteReason;
       setSkipAiVisible(false);
@@ -1235,28 +1355,114 @@ function fallbackSpeech(p){
   return "我只评论已经说过话的人。"+seatLabel(top)+"在历史投票和公开信息里的疑点需要被追问。";
 }
 
+function roleGoalText(p){
+  const plan=p.plan||"default";
+  const role=p.role;
+  const claims=S.claims||[];
+  const hasCounterClaim=claims.filter(c=>c.type==="role_claim"&&(c.result==="预言家"||c.result==="seer")).length>=2;
+  const hasSeerClaim=claims.some(c=>c.type==="role_claim"&&(c.result==="预言家"||c.result==="seer"));
+  const seerHasWolf=p.role==="seer"&&p.checked.some(c=>c.result==="狼人"&&pl(c.seat)?.alive);
+  const pressure=tablePressure().find(x=>x.seat===p.seat)?.pressure||0;
+  const underPressure=pressure>=.58||(alive().filter(x=>x.voteLean===p.seat).length>=2);
+  const isEndgame=alive().length<=4;
+  const phaseTexts={
+    bold:{
+      werewolf:hasCounterClaim?"可以考虑跳预言家对跳搅乱局面，也可以继续隐藏。":"制造合理怀疑，主动给出归票目标。",
+      seer:"有查杀就尽早跳预言家报查验带队。验到好人可以观察局势决定是否跳。",
+      witch:"主动使用解药和毒药改变局势，白天可以适度亮身份带队。",
+      hunter:"适当亮枪威慑，出局时基于证据开枪带走狼人。",
+      guard:"根据死亡信息反推刀口，大胆守护核心好人位。",
+      villager:"主动带队归票，点名怀疑对象并给出理由。"
+    },
+    cautious:{
+      werewolf:"模拟好人视角说话，踩人留余地不急于猛攻，优先保护自己不被关注。",
+      seer:"被扛推风险升高前不主动跳身份，先通过发言引导局面。",
+      witch:"白天保持中立，不主动跳女巫，用药以保险为主。",
+      hunter:"前期不暴露身份，被扛推或被刀时再亮枪。",
+      guard:"不暴露守护逻辑，避免被反推刀口。",
+      villager:"多问问题少踩人，先观察再站队。"
+    },
+    default:{
+      werewolf:"像普通好人一样发言，制造合理怀疑但不要急冲；重点找可公开解释的疑点，避免和狼同伴显得太近。",
+      seer:"根据查验结果决定是否暗示或公开。被推、查到狼人或有人冒充时可以明确。",
+      witch:"用公开结果推理，不要直接说救、毒、药还有没有；必要时用强势但可解释的方式保护好人。",
+      hunter:"保持威慑但不要无理由跳身份；被集中怀疑时给出清楚反打对象和理由。",
+      guard:"保护关键好人但不要报守护；从公开发言和票型解释自己的判断。",
+      villager:"没有夜间信息，只能从公开发言、票型、死亡结果推理，推动大家给出明确理由。"
+    },
+    aggressive:{
+      werewolf:hasCounterClaim?"跳预言家对跳，主动制造混乱。":"主动制造怀疑目标，敢于硬踩好人核心位。",
+      seer:"拿到信息尽早公开，用查杀定义局面。",
+      witch:"敢于用毒药清理高嫌疑目标。",
+      hunter:"适度亮枪威慑，出局时明确带走目标。",
+      guard:"大胆守护自己认为的好人核心。",
+      villager:"主动点名、压人、推动归票。"
+    },
+    complicated:{
+      werewolf:"仔细分析每个人的发言和票型矛盾，制造复杂的逻辑链让好人分不清真假。",
+      seer:"深度分析查验收益，选择最佳时机报查验。",
+      witch:"仔细权衡用药收益，解药救关键好人、毒药清高威胁狼。",
+      hunter:"深度分析谁在推动不正常的票型，出局时开枪带入综合分析。",
+      guard:"根据发言和死亡信息深度推断谁最需要保护。",
+      villager:"仔细研究发言与票型，找出狼人的蛛丝马迹。"
+    },
+    crazy:{
+      werewolf:"可以伪装成各种身份来搅乱局面，让好人搞不清谁是谁。",
+      seer:"伪装成平民降低被刀优先级。",
+      witch:"伪装成预言家吸引狼队火力。",
+      hunter:"伪装成村民隐藏枪口。",
+      guard:"伪装成平民降低被刀优先级。",
+      villager:"适度伪装神职视角降低被首刀风险。"
+    }
+  };
+  let base=phaseTexts[plan]?.[role]||phaseTexts.default[role]||"自由发挥。";
+  if(role==="seer"&&(seerHasWolf||hasCounterClaim||underPressure||p.checked.length>=2))base+=" 当前适合考虑公开预言家身份：有查到狼人、有人对跳、你被推、或查验信息已经足够影响局面时，要报真实查验并带队。";
+  if(role==="werewolf"&&(hasSeerClaim||underPressure||isEndgame))base+=" 当前可以考虑假跳或对跳身份制造混乱，尤其是真预言家出现、狼队友被推、你自己被集中怀疑或进入残局时。假跳后后续发言要保持一致，不要所有狼人一起跳。";
+  if(role==="witch"&&(underPressure||isEndgame||claims.some(c=>c.type==="role_claim"&&(c.result==="女巫"||c.result==="witch"))))base+=" 如果你被推、有人冒充女巫或残局需要统一好人票，可以公开女巫身份带队；公开后仍不要随便说具体救毒对象。";
+  if(role==="hunter"&&underPressure)base+=" 你正在承压，可以考虑公开猎人身份自保和威慑，但不要太早锁死枪口。";
+  if(role==="guard"&&(underPressure||isEndgame||claims.some(c=>c.type==="role_claim"&&(c.result==="守卫"||c.result==="guard"))))base+=" 守卫通常隐藏；只有被推、有人冒充守卫或残局排身份时才考虑公开，公开也不要完整报守护路线。";
+  if(isEndgame&&role==="werewolf")base+=" 残局轮次管理优先，要有明确归票目标。";
+  if(isEndgame&&role==="seer")base+=" 残局阶段必须把查验信息交代清楚，帮助好人做最后判断。";
+  return base;
+}
+
 function buildSpeechTask(p){
   const sc=S.speechContext||{};
   const spoken=(sc.spoken||[]).map(seatLabel).join("、")||"暂无";
   const remaining=(sc.remaining||[]).map(seatLabel).join("、")||"暂无";
   const firstFew=S.day===1&&(sc.spoken||[]).length<2;
-  const roleGoal={
-    werewolf:"像普通好人一样发言，制造合理怀疑但不要急冲；重点找可公开解释的疑点，避免和狼同伴显得太近。",
-    seer:"根据查验结果决定是否暗示或公开。第一天如果没有必要，不要直接跳身份；被推、查到狼人或有人冒充时可以明确。",
-    witch:"用公开结果推理，不要直接说救、毒、药还有没有；必要时用强势但可解释的方式保护好人。",
-    hunter:"保持威慑但不要无理由跳身份；被集中怀疑时给出清楚反打对象和理由。",
-    guard:"保护关键好人但不要报守护；从公开发言和票型解释自己的判断。",
-    villager:"没有夜间信息，只能从公开发言、票型、死亡结果推理，推动大家给出明确理由。"
-  }[p.role];
+  const roleGoal=roleGoalText(p);
   const earlyRule=firstFew?"第一天前两位发言信息极少：不能说任何人‘刚才发言有问题、前后矛盾、站边太快、发言少’，不能凭初始怀疑值定人。你可以说先听一圈、观察谁无证据推人、要求后面的人说明理由。":"";
-  return "请像真人玩家一样公开发言并给出投票倾向，同时更新你的临场判断。你的本轮目标："+roleGoal+" 已发言玩家："+spoken+"。尚未发言玩家："+remaining+"。只能评价已发言玩家的今日发言；尚未发言玩家只能基于历史票型、昨夜公开结果或旧发言评价。"+earlyRule+" 发言要具体、口语化、有立场，但不要机械列点。输出JSON：{\"note\":\"自己的草稿，包含你为什么这样说，不给其他玩家看\",\"speech\":\"公开发言，80到180字，必须提到具体座位或明确局面；禁止暴露夜间私密行动\",\"voteLean\":座位号|null,\"voteReason\":\"投票理由\",\"accuses\":[座位号],\"protects\":[座位号],\"readUpdates\":{\"座位号\":0到1},\"roleGuesses\":{\"座位号\":\"seer/witch/hunter/guard/villager/wolf/unknown\"},\"claims\":[{\"type\":\"role_claim/seer_check/other\",\"target\":座位号|null,\"result\":\"结果\"}]}";
+  const claimRule="身份策略必须显式选择：hide=继续隐藏；soft_claim=暗示但不明跳；true_claim=公开真实身份；fake_claim=伪装成其他身份；counter_claim=对跳别人的身份。不要每轮都跳身份，只有局势需要时才跳。狼人可以假跳但不能承认狼人或暴露狼队信息；预言家公开时只能报真实查验；女巫/守卫公开也不要随便报具体救毒或守护对象。voteReason会公开给所有玩家，必须只基于公开发言、票型、身份声明和可见结果；真实动机、私有信息、狼队收益只能写进note，不能写进voteReason。狼人voteReason必须伪装成好人视角，可以栽赃、借势或放大矛盾。";
+  return "请像真人玩家一样公开发言并给出投票倾向，同时更新你的临场判断。你的本轮目标："+roleGoal+" 已发言玩家："+spoken+"。尚未发言玩家："+remaining+"。只能评价已发言玩家的今日发言；尚未发言玩家只能基于历史票型、昨夜公开结果或旧发言评价。"+earlyRule+claimRule+" 发言要具体、口语化、有立场，但不要机械列点。输出JSON：{\"note\":\"自己的草稿，包含你为什么这样说，不给其他玩家看\",\"claimIntent\":\"hide/soft_claim/true_claim/fake_claim/counter_claim\",\"claimRole\":\"seer/witch/hunter/guard/villager/null\",\"claimContent\":\"如果本轮跳身份或暗示身份，这里写公开身份策略；否则为空\",\"speech\":\"公开发言，80到180字，必须提到具体座位或明确局面；禁止暴露夜间私密行动\",\"voteLean\":座位号|null,\"voteReason\":\"投票理由\",\"accuses\":[座位号],\"protects\":[座位号],\"readUpdates\":{\"座位号\":0到1},\"roleGuesses\":{\"座位号\":\"seer/witch/hunter/guard/villager/wolf/unknown\"},\"claims\":[{\"type\":\"role_claim/seer_check/other\",\"target\":座位号|null,\"result\":\"结果\"}]}";
 }
 
 function isUnsafeSpeech(p,speech){
   const text=String(speech||"");
   const patterns=[...(LEAK_PATTERNS[p.role]||[])];
-  if(p.role!=="seer"||!text.includes("预言家"))patterns.push(/查验结果/);
+  const claimsSeer=/我是预言家|我跳预言家|起跳预言家|我也跳预言家/.test(text);
+  if(p.role!=="seer"||!claimsSeer)patterns.push(/查验结果/);
   return patterns.some(re=>re.test(text));
+}
+
+function unsafePublicReason(reason){
+  const text=String(reason||"");
+  return /他是好人|她是好人|这是好人|被推出去的是好人|推好人|出好人|保护狼队友|保护队友|我们狼|狼队收益|狼队友|刀口|我知道.*不是狼|不是狼人所以|真实身份/.test(text);
+}
+
+function fallbackPublicReason(p,target){
+  const label=seatLabel(target);
+  if(p?.role==="werewolf")return label+"这轮解释不够完整，投票倾向也有点顺着场上风向走，我更想先处理这个位置。";
+  if(p?.role==="seer"&&p.checked?.some(c=>c.seat===Number(target)&&c.result==="狼人"))return label+"是我查验里最明确的问题位置，今天应该优先处理。";
+  if(p?.role==="hunter")return label+"一直没有把自己的怀疑链讲清楚，我不想让票继续散。";
+  if(p?.role==="witch")return label+"的公开发言和投票态度最需要解释，我先把票压在这里。";
+  return label+"这轮公开发言和投票态度不够清楚，我认为需要优先处理。";
+}
+
+function sanitizePublicReason(p,target,reason){
+  const text=simplifyJargon(String(reason||"").slice(0,120));
+  if(!text||unsafePublicReason(text))return fallbackPublicReason(p,target);
+  return text;
 }
 
 function referencesUnspokenToday(speech){
@@ -1309,16 +1515,18 @@ function tablePressure(){
 
 function tableReadHtml(){
   if(!S.players.length)return "<div class='review-block'>游戏尚未开始。</div>";
+  const infoFew=S.day<=1&&!(S.speechContext?.spoken||[]).length&&!S.history.votes.length;
+  if(infoFew)return "<div class='review-block'><b>公开信息不足</b><br>第一天发言刚开始，场上还没有足够公开发言和票型。先听完一圈再判断。</div>";
   const rows=tablePressure().map(x=>`<div class="table-read-row"><span>${esc(x.name)}</span><div class="table-read-bar"><span style="width:${Math.round(x.pressure*100)}%"></span></div><span>${pressureLabel(x.pressure)}</span></div>`).join("");
   const voteRows=alive().map(p=>`<div class="review-block"><b>${esc(playerLabel(p))}</b> 可能投向：${p.voteLean?esc(seatLabel(p.voteLean)):"未明确"}${p.voteReason?"<br><span style='color:#9ca6c8'>说法："+esc(p.voteReason)+"</span>":""}</div>`).join("");
   const my=me();
   const mine=my?Object.entries(my.suspicion).filter(([s])=>pl(s)?.alive).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([s])=>seatLabel(s)).join("、"):"暂无";
-  return `<div class="review-block"><b>你的当前感觉</b><br>更在意的位置：${esc(mine||"暂无")}</div><div class="review-block"><b>场上讨论压力</b><div class="table-read-grid" style="margin-top:8px">${rows}</div></div><div class="review-block"><b>可能投票方向</b>${voteRows}</div>`;
+  return `<div class="review-block"><b>提示</b><br>这是根据公开发言、票型和AI临场判断整理的辅助风向，不代表真实身份或客观事实。</div><div class="review-block"><b>你的当前感觉</b><br>更在意的位置：${esc(mine||"暂无")}</div><div class="review-block"><b>场上讨论压力</b><div class="table-read-grid" style="margin-top:8px">${rows}</div></div><div class="review-block"><b>可能投票方向</b>${voteRows}</div>`;
 }
 
 function showTableRead(){
   $("actionTitle").textContent="场上风向";
-  $("actionDesc").textContent="根据公开发言和票型整理，只辅助你回忆局面，不显示真实身份。";
+  $("actionDesc").textContent="根据公开发言和票型整理，只辅助回忆局面；不是上帝视角，不显示真实身份。";
   $("actionBody").innerHTML=tableReadHtml()+"<button class='btn' style='margin-top:14px' onclick=\"document.getElementById('actionModal').classList.remove('show')\">关闭</button>";
   $("actionModal").classList.add("show");
 }
@@ -1378,6 +1586,7 @@ function renderPersonaEditor(baseName){
   $("savePersonaBtn").onclick=()=>{
     const name=($("personaName").value||base.name).trim().slice(0,16)||base.name;
     const persona=($("personaText").value||base.persona).trim().slice(0,360)||base.persona;
+    if(personaRuleWarning(persona)&&!confirm("人设里似乎包含身份、阵营、夜间行动或规则信息。人设只建议写说话风格，确定仍要保存吗？"))return;
     CHARACTER_OVERRIDES[key]={name,persona,customImg:pendingImg};
     try{saveCharacterOverrides();toast("人设已保存到本地")}catch(e){toast("保存失败：本地空间可能不足",4500);return}
     applyPersonaToCurrentPlayers();
@@ -1401,6 +1610,15 @@ function normalizeSeatList(v){
 }
 
 function recordAIState(p,ans,speech){
+  const claimIntent=String(ans.claimIntent||"hide");
+  const claimRole=String(ans.claimRole||"").toLowerCase();
+  if(["true_claim","fake_claim","counter_claim","soft_claim"].includes(claimIntent)&&claimRole&&claimRole!=="null"){
+    const claim={day:S.day,intent:claimIntent,role:claimRole,text:String(ans.claimContent||speech||"").slice(0,120)};
+    p.publicClaim=claim;
+    p.claimHistory.push(claim);
+    S.claims.push({day:S.day,from:p.seat,type:"claim_intent",target:null,result:claimRole,text:String(speech).slice(0,80)});
+    if(claimIntent!=="soft_claim")S.claims.push({day:S.day,from:p.seat,type:"role_claim",target:null,result:claimRole,text:String(speech).slice(0,80)});
+  }
   const updates=ans.readUpdates||{};
   Object.entries(updates).forEach(([s,v])=>{if(pl(s)&&Number(s)!==p.seat)p.suspicion[s]=clamp01(v)});
   normalizeSeatList(ans.accuses||ans.suspects).forEach(s=>{if(s!==p.seat)p.suspicion[s]=clamp01((p.suspicion[s]||.4)+.08)});
@@ -1426,7 +1644,13 @@ function detectClaimsFromSpeech(p,speech){
     if(pl(target))S.claims.push({day:S.day,from:p.seat,type:"seer_check",target,result,text:text.slice(0,80)});
   }
   const roleClaim=text.match(/(?:我是|我跳|起跳|认)(预言家|女巫|猎人|守卫|村民)/);
-  if(roleClaim)S.claims.push({day:S.day,from:p.seat,type:"role_claim",target:null,result:roleClaim[1],text:text.slice(0,80)});
+  if(roleClaim){
+    const roleMap={预言家:"seer",女巫:"witch",猎人:"hunter",守卫:"guard",村民:"villager"};
+    const role=roleMap[roleClaim[1]]||roleClaim[1];
+    p.publicClaim={day:S.day,intent:p.role===role?"true_claim":"fake_claim",role,text:text.slice(0,120)};
+    p.claimHistory=p.claimHistory||[];p.claimHistory.push(p.publicClaim);
+    S.claims.push({day:S.day,from:p.seat,type:"role_claim",target:null,result:role,text:text.slice(0,80)});
+  }
 }
 
 function updateBeliefsFromSpeech(sp,speech,vi,vr){
@@ -1471,6 +1695,7 @@ async function votePhase(){
         const btn=document.createElement("button");btn.className="btn";btn.textContent="发 送";
         btn.onclick=()=>{
           const t=$("finalTalk")?.value?.trim()||"我没什么要补充的了。";
+          if(!humanLeakWarning(t))return;
           hideAction();
           resolve(simplifyJargon(t.slice(0,120)));
         };
@@ -1480,24 +1705,32 @@ async function votePhase(){
       await playQueue();
     }else{
       const fb=seatLabel(p.seat)+"说："+simplifyJargon("我觉得"+playerLabel(p.voteLean||alive().find(x=>x.seat!==p.seat))+"嫌疑最大，大家考虑一下。").slice(0,80);
-      const ans=await retryAI(p,"请用一句话简短表达你的最终投票倾向和理由，30-60字，口语化。输出{\"speech\":\"一句话\"}",{speech:fb},1);
+      setInlineBusy("系统",playerLabel(p)+"正在整理最后发言，请稍等。","vote",p.seat);
+      let ans={speech:fb};
+      try{
+        ans=await retryAI(p,"请用一句话简短表达你的最终投票倾向和理由，30-60字，口语化。输出{\"speech\":\"一句话\"}",{speech:fb},1);
+      }finally{
+        clearInlineBusy();
+      }
       const talk=simplifyJargon(String(ans.speech||fb.speech).slice(0,120));
       enqueue({type:"speech",title:playerLabel(p)+"最后发言",text:talk,atmo:"vote",log:true,visible:"public",speakerSeat:p.seat,nextText:"下一位 ▸"});
       await playQueue();
     }
   }
-  setInlineBusy("系统","大家正在整理最后的投票想法，请稍等。","vote");
+  toast("正在让所有 AI 玩家做出最终投票决定，可能需要一小会儿...",6000);
+  setInlineBusy("系统","大家正在整理最后的投票想法，需要 AI 逐人计算，可能要等一会儿，请不要刷新页面。","vote");
   for(const p of alive()){
     if(p.isHuman||S.winner)continue;
     const candidates=alive().filter(x=>x.seat!==p.seat);
     const fb={target:p.voteLean&&candidates.some(x=>x.seat===p.voteLean)?p.voteLean:aiPick(p,candidates,true),reason:p.voteReason||""};
     let ans=fb;
     if(S.aiMode!=="save"){
-      ans=await retryAI(p,"最后讨论已经结束，请根据全场公开发言、最后表态和票型，重新决定正式投票对象。不能投自己。输出{\"target\":座位号,\"reason\":\"一句话理由\"}",fb,1);
+      ans=await retryAI(p,"最后讨论已经结束，请根据全场公开发言、最后表态和票型，重新决定正式投票对象。不能投自己。输出{\"target\":座位号,\"publicReason\":\"公开投票理由，只能基于公开信息；狼人必须伪装成好人视角，可以栽赃或放大矛盾，但不能暴露真实狼队动机\",\"privateReason\":\"真实思考，可包含私有信息，不公开\"}",{target:fb.target,publicReason:fb.reason,privateReason:""},1);
     }
     if(candidates.some(x=>x.seat===Number(ans.target))){
       p.voteLean=Number(ans.target);
-      p.voteReason=String(ans.reason||p.voteReason||"").slice(0,120);
+      p.voteReason=sanitizePublicReason(p,p.voteLean,ans.publicReason||ans.reason||p.voteReason||"");
+      p.privateVoteReason=String(ans.privateReason||"").slice(0,180);
     }
   }
   clearInlineBusy();
@@ -1520,8 +1753,8 @@ async function votePhase(){
       votes.push({from:p.seat,to:seat});
     }else{
       const target=p.voteLean&&pl(p.voteLean)?.alive&&p.voteLean!==p.seat?p.voteLean:aiPick(p,alive().filter(x=>x.seat!==p.seat),true);
-      const reason=p.voteReason||"";
-      votes.push({from:p.seat,to:target,reason});
+      const reason=sanitizePublicReason(p,target,p.voteReason||"");
+      votes.push({from:p.seat,to:target,reason,privateReason:p.privateVoteReason||""});
     }
   }
   const counts={};votes.forEach(v=>counts[v.to]=(counts[v.to]||0)+1);
@@ -1552,7 +1785,8 @@ async function votePhase(){
 function killPlayer(seat,cause){
   const p=pl(seat);if(!p||!p.alive)return;
   p.alive=false;p.deathCause=cause;
-  addLog("system",seatLabel(seat)+"出局","死因："+cause,"public");
+  const publicCause=(cause==="投票放逐"||cause==="猎人开枪")?"（"+cause+"）":"";
+  addLog("system",seatLabel(seat)+"出局",seatLabel(seat)+"已出局"+publicCause+"。","public");
 }
 
 async function handleDeathSkills(deaths,source){
@@ -1560,7 +1794,7 @@ async function handleDeathSkills(deaths,source){
   while(chain.length){
     const seat=chain.shift();
     const p=pl(seat);if(!p||p.role!=="hunter"||p.shotUsed)continue;
-    if(p.deathCause==="女巫毒杀"){addLog("system","猎人压制",seatLabel(seat)+"被毒杀，无法开枪。","public");continue;}
+    if(p.deathCause==="女巫毒杀"){addLog("system","猎人未发动",seatLabel(seat)+"没有发动技能。","public");continue;}
     p.shotUsed=true;
     const candidates=alive().filter(x=>x.seat!==seat);
     if(!candidates.length)continue;
@@ -1622,7 +1856,7 @@ function buildGameReview(){
     }
     const v=votes.find(v=>v.day===d);
     if(v){
-      const flow=v.votes.map(x=>seatLabel(x.from)+"→"+seatLabel(x.to)+(x.reason?"("+x.reason+")":"")).join("；");
+      const flow=v.votes.map(x=>seatLabel(x.from)+"→"+seatLabel(x.to)+(x.reason?"(公开理由："+esc(x.reason)+")":"")+(x.privateReason?"<br><span style='color:#9ca6c8'>真实动机："+esc(x.privateReason)+"</span>":"")).join("；");
       const out=v.out?seatLabel(v.out)+"被放逐":"平票无人出局";
       voteParts.push("<b>第"+d+"天投票</b>："+flow+" → "+out);
       if(v.out){
@@ -1778,6 +2012,17 @@ $("logBackdrop").onclick=()=>{$("logDrawer").classList.remove("show")};
 $("roleStatBtn").onclick=()=>{
   if(!S.identityRevealed){toast("请等待身份揭示...");return}
   const p=me();if(!p)return;
+  // 出局后显示全桌身份
+  if(!p.alive){
+    const items=S.players.map(x=>
+      `<div style="padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);margin-bottom:4px;font-size:13px"><b>${esc(playerLabel(x))}${x.isHuman?"（你）":""}</b>：${roleName(x.role)} · ${x.alive?"存活":"出局："+x.deathCause}</div>`
+    ).join("");
+    $("actionTitle").textContent="全桌身份（你已出局）";
+    $("actionDesc").textContent="出局后公开，仅供复盘参考。";
+    $("actionBody").innerHTML=items+'<button class="btn" style="margin-top:14px" onclick="document.getElementById(\'actionModal\').classList.remove(\'show\')">关闭</button>';
+    $("actionModal").classList.add("show");
+    return;
+  }
   const priv=p.privateInfo.slice(-6).map(s=>"· "+s).join("<br>")||"暂无。";
   let wolfInfo="";
   if(p.role==="werewolf"&&S.wolfSeats&&S.wolfSeats.length){
