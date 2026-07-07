@@ -26,9 +26,9 @@ html[data-atmo="card"]{background:#0a061a}
 
 /* ======== Setup ======== */
 #setupScreen{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;justify-content:center;padding:24px 20px;background:radial-gradient(circle at 50% 18%,rgba(244,200,106,.16),transparent 34%),radial-gradient(circle at 20% 78%,rgba(74,58,255,.22),transparent 38%),linear-gradient(180deg,#080a1a,#0d1028 58%,#070814);overflow:auto}
-#setupScreen:before{content:"";position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,rgba(8,10,26,.02),rgba(8,10,26,.68));pointer-events:none}
+#setupScreen:before{content:"";position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,rgba(8,10,26,.01),rgba(8,10,26,.58));pointer-events:none}
 #setupBgCards{position:absolute;inset:-8%;z-index:0;pointer-events:none;overflow:hidden;filter:saturate(1.08)}
-#setupBgCards img{position:absolute;width:min(170px,34vw);border-radius:18px;opacity:.34;filter:blur(.15px) brightness(1) saturate(1.16);box-shadow:0 18px 50px rgba(0,0,0,.35);animation:cardFloat 12s ease-in-out infinite alternate}
+#setupBgCards img{position:absolute;width:min(170px,34vw);border-radius:18px;opacity:.48;filter:blur(.08px) brightness(1.04) saturate(1.18);box-shadow:0 18px 50px rgba(0,0,0,.35);animation:cardFloat 12s ease-in-out infinite alternate}
 #setupBgCards img:nth-child(1){left:5%;top:9%;transform:rotate(-14deg);animation-delay:-1s}
 #setupBgCards img:nth-child(2){right:6%;top:10%;transform:rotate(12deg);animation-delay:-3s}
 #setupBgCards img:nth-child(3){left:12%;bottom:8%;transform:rotate(10deg);animation-delay:-5s}
@@ -134,6 +134,7 @@ html[data-atmo="card"]{background:#0a061a}
 #actionModal.show{display:grid}
 #actionBackdrop{position:absolute;inset:0;background:rgba(3,4,10,.72);backdrop-filter:blur(10px)}
 #actionCard{position:relative;width:min(480px,100%);max-height:80dvh;overflow-y:auto;background:#12162b;border:1px solid rgba(255,255,255,.14);border-radius:24px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.45);animation:fadeUp .25s ease-out}
+
 @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}}
 #actionCard h3{font-size:17px;margin-bottom:4px}
 #actionCard .desc{font-size:12px;color:#9ca6c8;margin-bottom:12px;line-height:1.5}
@@ -156,9 +157,17 @@ html[data-atmo="card"]{background:#0a061a}
 .witch-actions button{flex:1;padding:12px;border-radius:14px;text-align:center;font-weight:600;font-size:13px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#f4f7ff}
 .witch-actions button.active{background:rgba(116,185,255,.18);border-color:rgba(116,185,255,.4);color:#74b9ff}
 .witch-actions button.danger.active{background:rgba(255,93,115,.18);border-color:rgba(255,93,115,.4);color:#ff5d73}
-.persona-preview{width:92px;height:92px;border-radius:18px;object-fit:cover;border:1px solid rgba(244,200,106,.35);background:rgba(255,255,255,.06)}
-.persona-tools{display:flex;gap:8px;margin-top:10px}
-.persona-tools button{flex:1;padding:10px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#cdd5f2;font-size:12px}
+.persona-editor{display:flex;flex-direction:column;min-height:0;flex:1}
+.persona-switcher{display:grid;grid-template-columns:74px 1fr 74px;gap:8px;align-items:center;margin-bottom:10px;flex-shrink:0}
+.persona-switcher button{padding:10px 6px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#cdd5f2;font-size:12px}
+.persona-current{text-align:center;font-size:18px;font-weight:900;color:#f4c86a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.persona-scroll{overflow-y:auto;min-height:0;flex:1;padding-right:2px;padding-bottom:10px}
+.persona-portrait-wrap{display:grid;place-items:center;margin-bottom:12px;padding:12px;border-radius:20px;background:radial-gradient(circle at 50% 18%,rgba(244,200,106,.14),transparent 48%),rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+.persona-preview{width:min(210px,58vw);height:min(300px,42dvh);border-radius:18px;object-fit:contain;object-position:center center;border:1px solid rgba(244,200,106,.35);background:rgba(5,7,18,.35);box-shadow:0 18px 50px rgba(0,0,0,.28)}
+.persona-footer{flex-shrink:0;padding-top:10px;background:linear-gradient(180deg,rgba(18,22,43,0),#12162b 22%)}
+.persona-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.persona-tools button{padding:10px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#cdd5f2;font-size:12px}
+.persona-save{width:100%;padding:12px;border-radius:14px;background:linear-gradient(135deg,#f7d47b,#ff9f66);color:#10121e;font-weight:900;margin-top:8px}
 .persona-note{font-size:12px;color:#9ca6c8;line-height:1.6;margin-top:8px}
 
 /* ======== Toast ======== */
@@ -1315,26 +1324,28 @@ function renderPersonaEditor(baseName){
   $("actionTitle").textContent="角色人设";
   $("actionDesc").textContent="只修改角色名称、立绘和说话风格；不会显示或修改任何游戏规则、身份策略或隐藏信息。";
   $("actionBody").innerHTML=`
-    <div style="display:grid;grid-template-columns:88px 1fr 88px;gap:8px;align-items:center;margin-bottom:12px">
-      <button id="personaPrevBtn" type="button" style="padding:10px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#cdd5f2">← 上一个</button>
-      <div id="personaCurrentName" style="text-align:center;font-size:18px;font-weight:900;color:#f4c86a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(cur.name||base.name)}</div>
-      <button id="personaNextBtn" type="button" style="padding:10px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#cdd5f2">下一个 →</button>
-    </div>
-    <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
-      <img id="personaPreview" class="persona-preview" src="${img}">
-      <div style="flex:1">
+    <div class="persona-editor">
+      <div class="persona-switcher">
+        <button id="personaPrevBtn" type="button">← 上一个</button>
+        <div id="personaCurrentName" class="persona-current">${esc(cur.name||base.name)}</div>
+        <button id="personaNextBtn" type="button">下一个 →</button>
+      </div>
+      <div class="persona-scroll">
+        <div class="persona-portrait-wrap"><img id="personaPreview" class="persona-preview" src="${img}"></div>
         <input id="personaImageInput" type="file" accept="image/png,image/jpeg,image/webp" style="display:none">
         <button id="personaUploadBtn" type="button" style="width:100%;padding:10px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#cdd5f2">上传新立绘</button>
         <div class="persona-note">建议使用小于 1MB 的图片。图片只保存在你的浏览器本地。</div>
+        <label style="display:block;font-size:12px;color:#9ca6c8;margin:12px 0 6px">角色名称</label>
+        <input id="personaName" value="${esc(cur.name||base.name)}" maxlength="16" style="width:100%;padding:11px;border-radius:12px;background:rgba(255,255,255,.07);color:#f4f7ff;border:1px solid rgba(255,255,255,.12);margin-bottom:10px">
+        <label style="display:block;font-size:12px;color:#9ca6c8;margin-bottom:6px">说话风格 / 性格描述</label>
+        <textarea id="personaText" maxlength="360" style="min-height:110px">${esc(cur.persona||base.persona)}</textarea>
+        <div class="persona-note">只写表达习惯、性格、语气。不要写身份、阵营、夜间信息或规则改动。</div>
       </div>
-    </div>
-    <label style="display:block;font-size:12px;color:#9ca6c8;margin-bottom:6px">角色名称</label>
-    <input id="personaName" value="${esc(cur.name||base.name)}" maxlength="16" style="width:100%;padding:11px;border-radius:12px;background:rgba(255,255,255,.07);color:#f4f7ff;border:1px solid rgba(255,255,255,.12);margin-bottom:10px">
-    <label style="display:block;font-size:12px;color:#9ca6c8;margin-bottom:6px">说话风格 / 性格描述</label>
-    <textarea id="personaText" maxlength="360" style="min-height:130px">${esc(cur.persona||base.persona)}</textarea>
-    <div class="persona-note">只写表达习惯、性格、语气。不要写身份、阵营、夜间信息或规则改动。</div>
-    <div class="persona-tools"><button id="savePersonaBtn">保存当前角色</button><button id="resetPersonaBtn">恢复默认</button></div>
-    <button class="btn" id="closePersonaBtn" style="margin-top:12px">关闭</button>`;
+      <div class="persona-footer">
+        <button id="savePersonaBtn" class="persona-save">保存当前角色</button>
+        <div class="persona-tools"><button id="resetPersonaBtn">恢复默认</button><button id="closePersonaBtn">关闭</button></div>
+      </div>
+    </div>`;
   $("actionModal").classList.add("show");
 
   let pendingImg=cur.customImg||null;
@@ -1366,7 +1377,7 @@ function renderPersonaEditor(baseName){
     delete CHARACTER_OVERRIDES[key];
     saveCharacterOverrides();toast("已恢复默认");applyPersonaToCurrentPlayers();renderPersonaEditor(key);
   };
-  $("closePersonaBtn").onclick=()=>$("actionModal").classList.remove("show");
+  $("closePersonaBtn").onclick=()=>{$("actionModal").classList.remove("show")};
 }
 
 function showPersonaSettings(){
