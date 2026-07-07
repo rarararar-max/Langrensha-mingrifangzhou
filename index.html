@@ -285,7 +285,10 @@ html[data-atmo="card"]{background:#0a061a}
 </div>
 
 <script>
-// ===== IMAGE DATA =====`r`nconst IMG={1:"1.png",2:"2.png",3:"3.png",4:"4.png",5:"5.png",6:"6.png",7:"7.png",8:"8.png",9:"9.png",10:"10.png"};`r`n`r`n// ===== CONSTANTS =====
+// ===== IMAGE DATA =====
+const IMG={1:"1.png",2:"2.png",3:"3.png",4:"4.png",5:"5.png",6:"6.png",7:"7.png",8:"8.png",9:"9.png",10:"10.png"};
+
+// ===== CONSTANTS =====
 const ROLES={
   werewolf:{name:"狼人",team:"wolf",icon:"🐺",brief:"夜晚击杀一名玩家，白天隐藏身份。",guide:"目标：活到最后让好人误投掉好人。每夜和狼同伴商量选一个人杀。白天要装成好人，可以假装归票、跟风、质疑别人。永远不能承认自己是狼人，不能公开说夜里商量的话。新手建议：不要第一个开口带节奏，先观察谁在乱踩。"},
   seer:{name:"预言家",team:"good",icon:"🔮",brief:"每晚查验一名玩家的阵营。",guide:"目标：用查验结果帮好人赢。每夜选一个人验他是好人还是狼人。验到狼人后，可以选择公开跳身份带节奏，也可以先藏住让狼人暴露。新手建议：不要第一夜就跳；有查杀时找个合适时机跳。"},
@@ -521,7 +524,12 @@ function preloadImages(urls){
 
 async function prepareAssets(){
   $("assetLoader").classList.add("show");
-  try{await preloadImages(requiredAssets())}
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  const started=Date.now();
+  try{await preloadImages(requiredAssets());
+    const left=500-(Date.now()-started);
+    if(left>0)await new Promise(r=>setTimeout(r,left));
+  }
   finally{$("assetLoader").classList.remove("show")}
 }
 
