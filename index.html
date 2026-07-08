@@ -438,6 +438,7 @@ const CHARACTER_POOL=[
 // ===== STATE =====
 const S={
   apiKey:"",baseUrl:"https://api.deepseek.com",model:"deepseek-v4-flash",apiProvider:"deepseek",aiMode:"standard",temperature:.75,
+  jsonModeUnsupported:false,
   players:[],logs:[],day:0,phase:"setup",busy:false,winner:null,
   sceneQueue:[],scenePlaying:false,sceneResolve:null,
   portraits:[], // seat->img index for AI players
@@ -993,13 +994,26 @@ function resetNight(){
 }
 
 // ===== AI =====
+function chatCompletionsEndpoint(baseUrl){
+  const url=String(baseUrl||"").trim().replace(/\/+$/,
+    "");
+  if(/\/chat\/completions$/i.test(url))return url;
+  if(/\/v1$/i.test(url))return url+"/chat/completions";
+  return url+"/v1/chat/completions";
+}
+
+function isJsonModeUnsupportedError(status,text){
+  if(![400,404,422].includes(Number(status)))return false;
+  return /response_format|json_object|json mode|unsupported|not support|不支持/i.test(String(text||""));
+}
+
 async function callDeepSeek(messages,jsonMode){
   const body={model:S.model,messages,temperature:S.temperature};
-  if(jsonMode)body.response_format={type:"json_object"};
+  if(jsonMode&&!S.jsonModeUnsupported)body.response_format={type:"json_object"};
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),AI_TIMEOUT_MS);
   let res;
-  const endpoint=(S.baseUrl||"").replace(/\/$/,"").replace(/\/v1$/i,"")+"/v1/chat/completions";
+  const endpoint=chatCompletionsEndpoint(S.baseUrl);
   try{
     res=await fetch(endpoint,{
     method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+S.apiKey},
@@ -1011,7 +1025,15 @@ async function callDeepSeek(messages,jsonMode){
     if(msg.includes("Load failed")||msg.includes("Failed to fetch"))throw new Error("API 请求被拦截（跨域/网络），可尝试使用后端转发或更换 API 端点");
     throw e;
   }finally{clearTimeout(timer)}
-  if(!res.ok){const t=await res.text().catch(()=>"");throw new Error("API "+res.status+"："+t.slice(0,160))}
+  if(!res.ok){
+    const t=await res.text().catch(()=>"");
+    if(jsonMode&&!S.jsonModeUnsupported&&isJsonModeUnsupportedError(res.status,t)){
+      S.jsonModeUnsupported=true;
+      addLog("system","接口兼容提示","当前接口不支持 response_format，已自动改用提示词 JSON 模式。","private");
+      return callDeepSeek(messages,false);
+    }
+    throw new Error("API "+res.status+"："+t.slice(0,160))
+  }
   const d=await res.json();return d.choices?.[0]?.message?.content?.trim()||"";
 }
 
@@ -1259,6 +1281,42 @@ function applySeerCheck(s,seat){
   s.suspicion[seat]=result==="狼人"?0.96:0.08;
 }
 
+function firstNightSafeWolfTarget(){
+  const human=me();
+  if(!human)return null;
+  const candidates=alive().filter(p=>p.seat!==human.seat&&p.role!=="werewolf"&&p.seat!==S.night.witchPoisonTarget);
+  if(!candidates.length)return null;
+  const wolves=alive().filter(p=>p.role==="werewolf");
+  const picker=wolves[0]||candidates[0];
+  return aiPick(picker,candidates,false)||candidates[0].seat;
+}
+
+function protectHumanFirstNight(deaths,causes){
+  const human=me();
+  if(S.day!==1||!human||!deaths.has(human.seat))return;
+  const originalCauses={...causes};
+  deaths.delete(human.seat);
+  delete causes[human.seat];
+
+  if(S.night.witchPoisonTarget===human.seat){
+    S.night.witchPoisonTarget=null;
+  }
+
+  if(S.night.wolfTarget===human.seat){
+    const newTarget=firstNightSafeWolfTarget();
+    S.night.wolfTarget=newTarget;
+    if(newTarget){
+      const guarded=S.night.guardTarget===newTarget;
+      const saved=S.night.witchSave;
+      if(guarded&&saved){deaths.add(newTarget);causes[newTarget]="双重保护失效"}
+      else if(!guarded&&!saved){deaths.add(newTarget);causes[newTarget]="狼人击杀"}
+      else delete causes[newTarget];
+    }
+  }
+
+  addLog("system","首夜保护","首夜保护已生效，避免你在第一晚直接出局。原风险："+(originalCauses[human.seat]||"未知")+"。","private");
+}
+
 async function witchPhase(){
   setPhase("witch");
   const w=S.players.find(p=>p.alive&&p.role==="witch");
@@ -1295,6 +1353,7 @@ function resolveNight(){
     else if(!guarded&&!saved){deaths.add(killed);causes[killed]="狼人击杀"}
   }
   if(S.night.witchPoisonTarget){deaths.add(S.night.witchPoisonTarget);causes[S.night.witchPoisonTarget]="女巫毒杀"}
+  protectHumanFirstNight(deaths,causes);
   S.night.deaths=[...deaths];S.night.deathCauses=causes;
   deaths.forEach(s=>killPlayer(s,causes[s]));
 }
@@ -2053,6 +2112,7 @@ $("startBtn").onclick=async()=>{
   S.apiKey=$("apiKey").value.trim();S.baseUrl=$("baseUrl").value.trim().replace(/\/$/,"");
   S.model=$("modelName").value.trim()||"deepseek-v4-flash";S.apiProvider=$("apiProvider").value;S.aiMode="standard";
   S.temperature=parseFloat($("tempSlider").value)||.75;
+  S.jsonModeUnsupported=false;
   if(!S.apiKey){toast("请先输入 API Key");return}
   setStartBusy(true,"正在连接 API...");
   try{
@@ -2084,6 +2144,7 @@ $("testApiBtn").onclick=async()=>{
   if($("testApiBtn").disabled)return;
   S.apiKey=$("apiKey").value.trim();S.baseUrl=$("baseUrl").value.trim().replace(/\/$/,"");
   S.model=$("modelName").value.trim()||"deepseek-v4-flash";S.apiProvider=$("apiProvider").value;
+  S.jsonModeUnsupported=false;
   if(!S.apiKey){toast("请先输入 API Key");return}
   setButtonBusy("testApiBtn",true,"测试中...");
   toast("正在测试...",5000);
