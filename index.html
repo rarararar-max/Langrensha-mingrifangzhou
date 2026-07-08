@@ -824,12 +824,6 @@ function showAction(title,desc,bodyHTML){
 
 function hideAction(){S._actionResolve=null;$("actionModal").classList.remove("show")}
 
-function humanLeakWarning(text){
-  const t=String(text||"");
-  const patterns=[/狼同伴|狼队友|队友是|我们狼|昨晚.*刀|刀了|刀口是|我.*守了|守护了|昨晚.*守|我.*救了|我.*毒了|解药|毒药|我昨晚验|我验了|我查验了|查验结果/];
-  if(!patterns.some(re=>re.test(t)))return true;
-  return confirm("这段话可能公开暴露夜间私密信息或狼队信息。确定要这样发送吗？");
-}
 
 function personaRuleWarning(text){
   const t=String(text||"");
@@ -874,7 +868,7 @@ async function inputSpeech(){
     btn.className="btn";btn.textContent="发送发言";
     btn.onclick=()=>{
       const t=$("speechInput")?.value?.trim()||"我先观察一下，暂时不明确站边。";
-      if(!humanLeakWarning(t))return;
+      
       hideAction();resolve(t.slice(0,220));
     };
     $("actionBody").appendChild(btn);
@@ -890,7 +884,7 @@ async function inputLastWords(p){
       btn.className="btn";btn.textContent="发表遗言";
       btn.onclick=()=>{
         const t=$("lastWordsInput")?.value?.trim()||"我没什么更多信息，大家看票型和发言继续盘。";
-        if(!humanLeakWarning(t))return;
+        
         hideAction();resolve(t.slice(0,180));
       };
       $("actionBody").appendChild(btn);
@@ -1385,7 +1379,7 @@ async function speechesPhase(){
   const nightDeaths=S.night?.deaths||[];
   let startSeat=S.day===1?baseOrder[Math.floor(Math.random()*baseOrder.length)]?.seat:nextAliveSeatAfter(nightDeaths[0]||0);
   const order=rotateFrom(baseOrder,startSeat);
-  S.speechContext={day:S.day,spoken:[],remaining:order.map(p=>p.seat),current:null,index:0,total:order.length};
+  S.speechContext={day:S.day,spoken:[],remaining:order.map(p=>p.seat),current:null,index:0,total:order.length,speeches:[]};
   addLog("system","发言顺序","第"+S.day+"天从"+seatLabel(startSeat)+"开始："+order.map(playerLabel).join("、"),"public");
   for(const p of order){
     if(S.winner)return;
@@ -1399,6 +1393,7 @@ async function speechesPhase(){
       detectClaimsFromSpeech(me(),speech);
       updateBeliefsFromSpeech(me(),speech,null);
       S.speechContext.spoken.push(p.seat);
+      S.speechContext.speeches.push({seat:p.seat,summary:speech.slice(0,60)});
       spk.textContent=playerLabel(me())+"（你）";
       txt.textContent=simplifyJargon(speech);
       stt.textContent="存活";
@@ -1449,6 +1444,7 @@ async function speechesPhase(){
       recordAIState(p,ans,speech);
       updateBeliefsFromSpeech(p,speech,p.voteLean,voteReason);
       S.speechContext.spoken.push(p.seat);
+      S.speechContext.speeches.push({seat:p.seat,summary:speech.slice(0,60)});
       await new Promise(r=>{btn.onclick=()=>{r()}});
     }
   }
@@ -1546,8 +1542,10 @@ function buildSpeechTask(p){
   const firstFew=S.day===1&&(sc.spoken||[]).length<2;
   const roleGoal=roleGoalText(p);
   const earlyRule=firstFew?"第一天前两位发言信息极少：不能说任何人‘刚才发言有问题、前后矛盾、站边太快、发言少’，不能凭初始怀疑值定人。你可以说先听一圈、观察谁无证据推人、要求后面的人说明理由。":"";
+  const prevSpeeches=(sc.speeches||[]).map(s=>seatLabel(s.seat)+"："+s.summary).join("\n");
+  const responseRule=prevSpeeches?"\n\n已有发言摘要（按顺序）：\n"+prevSpeeches+"\n\n请对至少一个具体座位的前置发言做出回应：可以同意并补充新理由，也可以反对并说明逻辑。避免只重复已有观点或只说套话。":"";
   const claimRule="身份策略必须显式选择：hide=继续隐藏；soft_claim=暗示但不明跳；true_claim=公开真实身份；fake_claim=伪装成其他身份；counter_claim=对跳别人的身份。不要每轮都跳身份，只有局势需要时才跳。狼人可以假跳但不能承认狼人或暴露狼队信息；预言家公开时只能报真实查验；女巫/守卫公开也不要随便报具体救毒或守护对象。voteReason会公开给所有玩家，必须只基于公开发言、票型、身份声明和可见结果；真实动机、私有信息、狼队收益只能写进note，不能写进voteReason。狼人voteReason必须伪装成好人视角，可以栽赃、借势或放大矛盾。本轮发言禁止只说“我先观察/信息太少/再看一轮/暂时不站边”等模糊表态。"+(firstFew?"第一天前两位不强制踩死具体玩家；如果还没有可评价对象，可以点名后置位需要解释的问题或说明你会重点观察哪个座位的后续理由。":"即使只有第一印象，也要点名一个具体座位并给出为什么。");
-  return "请像真人玩家一样公开发言并给出投票倾向，同时更新你的临场判断。你的本轮目标："+roleGoal+" 已发言玩家："+spoken+"。尚未发言玩家："+remaining+"。只能评价已发言玩家的今日发言；尚未发言玩家只能基于历史票型、昨夜公开结果或旧发言评价。"+earlyRule+claimRule+" 发言要具体、口语化、有立场，但不要机械列点。输出JSON：{\"note\":\"自己的草稿，包含你为什么这样说，不给其他玩家看\",\"claimIntent\":\"hide/soft_claim/true_claim/fake_claim/counter_claim\",\"claimRole\":\"seer/witch/hunter/guard/villager/null\",\"claimContent\":\"如果本轮跳身份或暗示身份，这里写公开身份策略；否则为空\",\"speech\":\"公开发言，40到180字，必须提到具体座位或明确局面；禁止暴露夜间私密行动\",\"voteLean\":座位号|null,\"voteReason\":\"投票理由\",\"accuses\":[座位号],\"protects\":[座位号],\"readUpdates\":{\"座位号\":0到1},\"roleGuesses\":{\"座位号\":\"seer/witch/hunter/guard/villager/wolf/unknown\"},\"claims\":[{\"type\":\"role_claim/seer_check/other\",\"target\":座位号|null,\"result\":\"结果\"}]}";
+  return "请像真人玩家一样公开发言并给出投票倾向，同时更新你的临场判断。你的本轮目标："+roleGoal+" 已发言玩家："+spoken+"。尚未发言玩家："+remaining+"。只能评价已发言玩家的今日发言；尚未发言玩家只能基于历史票型、昨夜公开结果或旧发言评价。"+earlyRule+responseRule+claimRule+" 发言要具体、口语化、有立场，但不要机械列点。输出JSON：{\"note\":\"自己的草稿，包含你为什么这样说，不给其他玩家看\",\"claimIntent\":\"hide/soft_claim/true_claim/fake_claim/counter_claim\",\"claimRole\":\"seer/witch/hunter/guard/villager/null\",\"claimContent\":\"如果本轮跳身份或暗示身份，这里写公开身份策略；否则为空\",\"speech\":\"公开发言，40到180字，必须提到具体座位或明确局面；禁止暴露夜间私密行动\",\"voteLean\":座位号|null,\"voteReason\":\"投票理由\",\"accuses\":[座位号],\"protects\":[座位号],\"readUpdates\":{\"座位号\":0到1},\"roleGuesses\":{\"座位号\":\"seer/witch/hunter/guard/villager/wolf/unknown\"},\"claims\":[{\"type\":\"role_claim/seer_check/other\",\"target\":座位号|null,\"result\":\"结果\"}]}";
 }
 
 function isUnsafeSpeech(p,speech){
@@ -1830,7 +1828,7 @@ async function votePhase(){
         const btn=document.createElement("button");btn.className="btn";btn.textContent="发 送";
         btn.onclick=()=>{
           const t=$("finalTalk")?.value?.trim()||"我没什么要补充的了。";
-          if(!humanLeakWarning(t))return;
+          
           hideAction();
           resolve(simplifyJargon(t.slice(0,120)));
         };
@@ -1906,6 +1904,20 @@ async function votePhase(){
     await playQueue();
   }else{
     out=tied[0];
+    // 第一天不放逐用户：若用户为最高票，转为平票
+    if(S.day===1&&out===me()?.seat){
+      const entries=Object.entries(counts).filter(([s])=>Number(s)!==out);
+      const secondMax=entries.length?Math.max(...entries.map(([,c])=>c)):0;
+      if(secondMax>0){
+        const secondTied=entries.filter(([,c])=>c===secondMax).map(([s])=>Number(s));
+        tied=[out,...secondTied];
+      }else{
+        tied=[out];
+      }
+      dialog(formatVoteBlock(votes,null,tied,max),"投票结果","首日平票保护（最高票为你，转为平票无人出局）","vote","system");
+      S.history.votes.push({day:S.day,votes,out:null});
+      await playQueue();
+    }else{
     S.history.votes.push({day:S.day,votes,out});
     dialog(formatVoteBlock(votes,out,null,max),"投票结果","","vote","system",out,true);
     await playQueue();
@@ -1916,6 +1928,7 @@ async function votePhase(){
     await handleDeathSkills([out],"vote").then(async()=>{
       await playQueue();
     });
+    }
   }
   if(!checkWin())await startNight();
 }
